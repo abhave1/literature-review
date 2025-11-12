@@ -17,12 +17,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get valid keys from environment variable
+    // Get valid keys from environment variable (server-side only)
     // You can store multiple keys separated by commas
-    const validKeys = process.env.NEXT_PUBLIC_ACCESS_KEYS?.split(',').map((k) => k.trim()) || [];
+    const validKeys = process.env.ACCESS_KEYS?.split(',').map((k) => k.trim()) || [];
 
     if (validKeys.length === 0) {
-      console.error('NEXT_PUBLIC_ACCESS_KEYS not configured');
+      console.error('ACCESS_KEYS not configured');
       return NextResponse.json(
         { valid: false, error: 'Server configuration error' },
         { status: 500 }
