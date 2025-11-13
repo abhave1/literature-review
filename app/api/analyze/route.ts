@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const files: FileInput[] = body.files;
+    const ratedAspects: string | undefined = body.ratedAspects;
 
     if (!files || files.length === 0) {
       return NextResponse.json(
@@ -41,10 +42,13 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`Received ${files.length} files for analysis`);
+    if (ratedAspects) {
+      console.log(`Using rated aspects: ${ratedAspects.substring(0, 100)}...`);
+    }
 
     // Process all files in parallel
     const results = await Promise.all(
-      files.map((file) => analyzeText(file))
+      files.map((file) => analyzeText(file, ratedAspects))
     );
 
     // Return results
@@ -68,7 +72,7 @@ export async function POST(request: NextRequest) {
  * Analyze extracted text with ASU AIML API
  * Text extraction is done client-side, so this only handles the AI analysis
  */
-async function analyzeText(file: FileInput): Promise<AnalysisResult> {
+async function analyzeText(file: FileInput, ratedAspects?: string): Promise<AnalysisResult> {
   const { fileName, text, metadata, extractionSuccess, extractionError } = file;
 
   try {
@@ -92,8 +96,14 @@ async function analyzeText(file: FileInput): Promise<AnalysisResult> {
 
     console.log(`Analyzing ${fileName} (${text.length} characters)...`);
 
-    // Send extracted text to ASU AIML API for analysis
-    const prompt = `From the extracted text below, according to your system prompt given to you, analyze the text and output your conclusion.\n\nHere is the extracted text:\n${text}`;
+    // Build the prompt with optional rated aspects
+    let prompt = `From the extracted text below, according to your system prompt given to you, analyze the text and output your conclusion.`;
+
+    if (ratedAspects) {
+      prompt += `\n\nHere are your rated aspects:\n${ratedAspects}`;
+    }
+
+    prompt += `\n\nHere is the extracted text:\n${text}`;
 
     const analysisResult = await asuAimlClient.query(prompt, {
       model_provider: 'gcp-deepmind',

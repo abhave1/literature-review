@@ -32,6 +32,7 @@ export default function Home() {
   const [processingStatus, setProcessingStatus] = useState<string>('');
   const [results, setResults] = useState<ApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [ratedAspects, setRatedAspects] = useState<string>('');
 
   // Check if user has a valid key on mount
   useEffect(() => {
@@ -110,6 +111,7 @@ export default function Home() {
             extractionSuccess: extraction.success,
             extractionError: extraction.error,
           })),
+          ratedAspects: ratedAspects.trim() || undefined,
         }),
       });
 
@@ -176,6 +178,23 @@ export default function Home() {
           <p className="text-lg text-gray-600">
             Upload PDF files for AI-powered analysis with parallel processing
           </p>
+        </div>
+
+        {/* Rated Aspects Section */}
+        <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+          <h2 className="text-2xl font-semibold text-gray-900 mb-4">
+            Rated Aspects (Optional)
+          </h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Enter your rated aspects below. This will be appended to the AI prompt as: "Here are your rated aspects: {'{your text}'}"
+          </p>
+          <textarea
+            value={ratedAspects}
+            onChange={(e) => setRatedAspects(e.target.value)}
+            placeholder="Example:&#10;(1) Is it a paper about UPGRADING one or more of the ICAP modes?&#10;(2) Is it about EXTENDING the ICAP theory in a new direction?&#10;..."
+            disabled={isProcessing}
+            className="w-full h-48 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical font-mono text-sm text-black disabled:bg-gray-100 disabled:cursor-not-allowed"
+          />
         </div>
 
         {/* Upload Section */}
