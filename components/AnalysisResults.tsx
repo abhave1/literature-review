@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { exportToExcel, exportToCSV, getExportStats } from '@/lib/excel-exporter';
+import { exportToExcel, exportFilteredToExcel, exportToCSV, getExportStats } from '@/lib/excel-exporter';
 import { parseAspects } from '@/lib/aspect-parser';
 
 interface AnalysisResult {
@@ -42,6 +42,10 @@ export default function AnalysisResults({
 
   const handleExportExcel = () => {
     exportToExcel(results);
+  };
+
+  const handleExportFilteredExcel = () => {
+    exportFilteredToExcel(results);
   };
 
   const handleExportCSV = () => {
@@ -88,7 +92,27 @@ export default function AnalysisResults({
                 d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
               />
             </svg>
-            Export to Excel
+            Export Full Analysis
+          </button>
+
+          <button
+            onClick={handleExportFilteredExcel}
+            className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors flex items-center gap-2"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+              />
+            </svg>
+            Export Answers Only
           </button>
 
           <button
