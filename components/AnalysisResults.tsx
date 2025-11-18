@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { exportToExcel, exportFilteredToExcel, exportToCSV, getExportStats } from '@/lib/excel-exporter';
-import { parseAspects } from '@/lib/aspect-parser';
 
 interface AnalysisResult {
   fileName: string;
@@ -262,120 +261,27 @@ export default function AnalysisResults({
                   {/* Analysis Result */}
                   <div>
                     <h4 className="font-semibold text-gray-900 mb-2">Analysis Result</h4>
-                    {(() => {
-                      const analysisText = typeof result.data.analysis === 'string'
-                        ? result.data.analysis
-                        : JSON.stringify(result.data.analysis, null, 2);
-
-                      const parsed = parseAspects(analysisText);
-
-                      // Show segmented aspects if available
-                      if (parsed.hasAspects && parsed.aspects.length > 0) {
-                        return (
-                          <div className="space-y-4">
-                            {/* Title */}
-                            {parsed.title && (
-                              <div className="bg-blue-50 p-4 rounded border border-blue-200">
-                                <h5 className="font-bold text-blue-900">{parsed.title}</h5>
-                              </div>
-                            )}
-
-                            {/* Aspects */}
-                            <div className="space-y-3">
-                              {parsed.aspects.map((aspect, idx) => (
-                                <details key={idx} className="bg-white border border-gray-300 rounded-lg overflow-hidden">
-                                  <summary className="p-3 cursor-pointer hover:bg-gray-50 transition-colors font-semibold text-gray-900 flex items-center justify-between">
-                                    <span>Aspect ({aspect.aspectNumber}) - {aspect.aspectTitle}</span>
-                                    <svg
-                                      className="w-4 h-4 text-gray-600 transition-transform [[open]>&]:rotate-90"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      viewBox="0 0 24 24"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M9 5l7 7-7 7"
-                                      />
-                                    </svg>
-                                  </summary>
-                                  <div className="p-4 bg-gray-50 border-t border-gray-200 space-y-3">
-                                    {aspect.subsectionA && (
-                                      <div>
-                                        <p className="text-xs font-bold text-gray-600 mb-1">(a)</p>
-                                        <p className="text-sm text-gray-800 whitespace-pre-wrap">{aspect.subsectionA}</p>
-                                      </div>
-                                    )}
-                                    {aspect.subsectionB && (
-                                      <div>
-                                        <p className="text-xs font-bold text-gray-600 mb-1">(b)</p>
-                                        <p className="text-sm text-gray-800 whitespace-pre-wrap">{aspect.subsectionB}</p>
-                                      </div>
-                                    )}
-                                    {aspect.subsectionC && (
-                                      <div>
-                                        <p className="text-xs font-bold text-gray-600 mb-1">(c)</p>
-                                        <p className="text-sm text-gray-800 whitespace-pre-wrap">{aspect.subsectionC}</p>
-                                      </div>
-                                    )}
-                                  </div>
-                                </details>
-                              ))}
-                            </div>
-
-                            {/* Show raw text option */}
-                            <details className="mt-4">
-                              <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-900">
-                                View raw analysis text
-                              </summary>
-                              <div className="mt-2 bg-white p-4 rounded border border-gray-200 prose prose-sm max-w-none">
-                                <ReactMarkdown
-                                  components={{
-                                    h1: ({ children }) => <h1 className="text-2xl font-bold mt-6 mb-4 text-black">{children}</h1>,
-                                    h2: ({ children }) => <h2 className="text-xl font-bold mt-5 mb-3 text-black">{children}</h2>,
-                                    h3: ({ children }) => <h3 className="text-lg font-semibold mt-4 mb-2 text-black">{children}</h3>,
-                                    p: ({ children }) => <p className="mb-3 text-black leading-relaxed">{children}</p>,
-                                    ul: ({ children }) => <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>,
-                                    ol: ({ children }) => <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>,
-                                    li: ({ children }) => <li className="text-black">{children}</li>,
-                                    code: ({ children }) => <code className="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono text-black">{children}</code>,
-                                    blockquote: ({ children }) => <blockquote className="border-l-4 border-gray-300 pl-4 italic text-black my-3">{children}</blockquote>,
-                                    strong: ({ children }) => <strong className="font-bold text-black">{children}</strong>,
-                                    em: ({ children }) => <em className="italic text-black">{children}</em>,
-                                  }}
-                                >
-                                  {analysisText}
-                                </ReactMarkdown>
-                              </div>
-                            </details>
-                          </div>
-                        );
-                      }
-
-                      // Fallback to regular markdown display
-                      return (
-                        <div className="bg-white p-6 rounded border border-gray-200 prose prose-sm max-w-none">
-                          <ReactMarkdown
-                            components={{
-                              h1: ({ children }) => <h1 className="text-2xl font-bold mt-6 mb-4 text-black">{children}</h1>,
-                              h2: ({ children }) => <h2 className="text-xl font-bold mt-5 mb-3 text-black">{children}</h2>,
-                              h3: ({ children }) => <h3 className="text-lg font-semibold mt-4 mb-2 text-black">{children}</h3>,
-                              p: ({ children }) => <p className="mb-3 text-black leading-relaxed">{children}</p>,
-                              ul: ({ children }) => <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>,
-                              ol: ({ children }) => <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>,
-                              li: ({ children }) => <li className="text-black">{children}</li>,
-                              code: ({ children }) => <code className="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono text-black">{children}</code>,
-                              blockquote: ({ children }) => <blockquote className="border-l-4 border-gray-300 pl-4 italic text-black my-3">{children}</blockquote>,
-                              strong: ({ children }) => <strong className="font-bold text-black">{children}</strong>,
-                              em: ({ children }) => <em className="italic text-black">{children}</em>,
-                            }}
-                          >
-                            {analysisText}
-                          </ReactMarkdown>
-                        </div>
-                      );
-                    })()}
+                    <div className="bg-white p-6 rounded border border-gray-200 prose prose-sm max-w-none">
+                      <ReactMarkdown
+                        components={{
+                          h1: ({ children }) => <h1 className="text-2xl font-bold mt-6 mb-4 text-black">{children}</h1>,
+                          h2: ({ children }) => <h2 className="text-xl font-bold mt-5 mb-3 text-black">{children}</h2>,
+                          h3: ({ children }) => <h3 className="text-lg font-semibold mt-4 mb-2 text-black">{children}</h3>,
+                          p: ({ children }) => <p className="mb-3 text-black leading-relaxed">{children}</p>,
+                          ul: ({ children }) => <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>,
+                          ol: ({ children }) => <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>,
+                          li: ({ children }) => <li className="text-black">{children}</li>,
+                          code: ({ children }) => <code className="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono text-black">{children}</code>,
+                          blockquote: ({ children }) => <blockquote className="border-l-4 border-gray-300 pl-4 italic text-black my-3">{children}</blockquote>,
+                          strong: ({ children }) => <strong className="font-bold text-black">{children}</strong>,
+                          em: ({ children }) => <em className="italic text-black">{children}</em>,
+                        }}
+                      >
+                        {typeof result.data.analysis === 'string'
+                          ? result.data.analysis
+                          : JSON.stringify(result.data.analysis, null, 2)}
+                      </ReactMarkdown>
+                    </div>
                   </div>
 
                   {/* Extracted Text Preview */}
