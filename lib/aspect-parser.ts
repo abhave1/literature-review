@@ -85,7 +85,7 @@ export function parseAspects(analysisText: string): ParsedAnalysis {
     }
 
     const aspectNumber = parseInt(aspectHeaderMatch[1], 10);
-    const aspectTitle = aspectHeaderMatch[2].trim();
+    const aspectTitle = normalizeTitle(aspectHeaderMatch[2]);
 
     // Extract subsections (a), (b), (c)
     const subsectionA = extractSubsection(sectionTrimmed, 'a');
@@ -108,6 +108,15 @@ export function parseAspects(analysisText: string): ParsedAnalysis {
     rawText: trimmedText,
     hasAspects: aspects.length > 0,
   };
+}
+
+/**
+ * Normalize aspect title by removing extra whitespace and standardizing spacing
+ */
+function normalizeTitle(title: string): string {
+  return title
+    .replace(/\s+/g, ' ')  // Replace multiple spaces/newlines with single space
+    .trim();                // Trim leading/trailing whitespace
 }
 
 /**
@@ -135,7 +144,7 @@ function extractSubsection(text: string, subsectionLabel: string): string {
  */
 export function hasAspectStructure(text: string): boolean {
   if (!text) return false;
-  const aspectRegex = /(?:###\s+)?Aspect\s*\(\d+\)/i;;
+  const aspectRegex = /(?:###\s+)?Aspect\s*\(\d+\)/i;
   return aspectRegex.test(text);
 }
 

@@ -22,9 +22,9 @@ interface AnalysisResult {
  * One row per PDF, with aspects as columns
  */
 export function exportToExcel(results: AnalysisResult[]): void {
-  // First pass: determine the maximum number of aspects across all files
-  let maxAspects = 0;
+  // First pass: parse all results and collect unique aspect titles
   const parsedResults: Array<{ fileName: string; parsed: ParsedAnalysis; error?: string }> = [];
+  const aspectTitlesSet = new Set<string>();
 
   for (const result of results) {
     if (!result.success || !result.data?.analysis) {
@@ -43,10 +43,16 @@ export function exportToExcel(results: AnalysisResult[]): void {
     const parsed = parseAspects(analysisText);
     parsedResults.push({ fileName: result.fileName, parsed });
 
-    if (parsed.aspects.length > maxAspects) {
-      maxAspects = parsed.aspects.length;
+    // Collect all unique aspect titles
+    for (const aspect of parsed.aspects) {
+      if (aspect.aspectTitle) {
+        aspectTitlesSet.add(aspect.aspectTitle);
+      }
     }
   }
+
+  // Convert to sorted array for consistent column ordering
+  const aspectTitles = Array.from(aspectTitlesSet).sort();
 
   // Build rows with dynamic columns
   const rows: any[] = [];
@@ -59,11 +65,11 @@ export function exportToExcel(results: AnalysisResult[]): void {
     } else if (!parsed.hasAspects || parsed.aspects.length === 0) {
       row['Note'] = 'No aspects found';
     } else {
-      // Add each aspect with all subsections (a), (b), (c)
-      for (let i = 0; i < parsed.aspects.length; i++) {
-        const aspect = parsed.aspects[i];
-        const aspectNum = i + 1;
-        const baseTitle = aspect.aspectTitle || `Aspect ${aspectNum}`;
+      // Create a map of aspect titles to their content for this file
+      const aspectMap = new Map<string, string>();
+
+      for (const aspect of parsed.aspects) {
+        const title = aspect.aspectTitle || '';
 
         // Combine all subsections with labels
         let combinedContent = '';
@@ -77,7 +83,14 @@ export function exportToExcel(results: AnalysisResult[]): void {
           combinedContent += combinedContent ? `\n\n(c) ${aspect.subsectionC}` : `(c) ${aspect.subsectionC}`;
         }
 
-        row[baseTitle] = combinedContent;
+        if (title) {
+          aspectMap.set(title, combinedContent);
+        }
+      }
+
+      // Add columns for each standardized aspect title
+      for (const aspectTitle of aspectTitles) {
+        row[aspectTitle] = aspectMap.get(aspectTitle) || '';
       }
     }
 
@@ -89,7 +102,7 @@ export function exportToExcel(results: AnalysisResult[]): void {
 
   // Set column widths (FileName + dynamic aspect columns)
   const colWidths = [{ wch: 30 }]; // File Name column
-  for (let i = 0; i < maxAspects; i++) {
+  for (let i = 0; i < aspectTitles.length; i++) {
     colWidths.push({ wch: 80 }); // Wider columns for combined content
   }
   worksheet['!cols'] = colWidths;
@@ -110,9 +123,9 @@ export function exportToExcel(results: AnalysisResult[]): void {
  * One row per PDF, with aspects as columns (same as Excel)
  */
 export function exportToCSV(results: AnalysisResult[]): void {
-  // First pass: determine the maximum number of aspects across all files
-  let maxAspects = 0;
+  // First pass: parse all results and collect unique aspect titles
   const parsedResults: Array<{ fileName: string; parsed: ParsedAnalysis; error?: string }> = [];
+  const aspectTitlesSet = new Set<string>();
 
   for (const result of results) {
     if (!result.success || !result.data?.analysis) {
@@ -131,10 +144,16 @@ export function exportToCSV(results: AnalysisResult[]): void {
     const parsed = parseAspects(analysisText);
     parsedResults.push({ fileName: result.fileName, parsed });
 
-    if (parsed.aspects.length > maxAspects) {
-      maxAspects = parsed.aspects.length;
+    // Collect all unique aspect titles
+    for (const aspect of parsed.aspects) {
+      if (aspect.aspectTitle) {
+        aspectTitlesSet.add(aspect.aspectTitle);
+      }
     }
   }
+
+  // Convert to sorted array for consistent column ordering
+  const aspectTitles = Array.from(aspectTitlesSet).sort();
 
   // Build rows with dynamic columns
   const rows: any[] = [];
@@ -147,11 +166,11 @@ export function exportToCSV(results: AnalysisResult[]): void {
     } else if (!parsed.hasAspects || parsed.aspects.length === 0) {
       row['Note'] = 'No aspects found';
     } else {
-      // Add each aspect with all subsections (a), (b), (c)
-      for (let i = 0; i < parsed.aspects.length; i++) {
-        const aspect = parsed.aspects[i];
-        const aspectNum = i + 1;
-        const baseTitle = aspect.aspectTitle || `Aspect ${aspectNum}`;
+      // Create a map of aspect titles to their content for this file
+      const aspectMap = new Map<string, string>();
+
+      for (const aspect of parsed.aspects) {
+        const title = aspect.aspectTitle || '';
 
         // Combine all subsections with labels
         let combinedContent = '';
@@ -165,7 +184,14 @@ export function exportToCSV(results: AnalysisResult[]): void {
           combinedContent += combinedContent ? `\n\n(c) ${aspect.subsectionC}` : `(c) ${aspect.subsectionC}`;
         }
 
-        row[baseTitle] = combinedContent;
+        if (title) {
+          aspectMap.set(title, combinedContent);
+        }
+      }
+
+      // Add columns for each standardized aspect title
+      for (const aspectTitle of aspectTitles) {
+        row[aspectTitle] = aspectMap.get(aspectTitle) || '';
       }
     }
 
@@ -208,9 +234,9 @@ function filterBeforeDash(text: string): string {
  * Removes everything after " - " in each response
  */
 export function exportFilteredToExcel(results: AnalysisResult[]): void {
-  // First pass: determine the maximum number of aspects across all files
-  let maxAspects = 0;
+  // First pass: parse all results and collect unique aspect titles
   const parsedResults: Array<{ fileName: string; parsed: ParsedAnalysis; error?: string }> = [];
+  const aspectTitlesSet = new Set<string>();
 
   for (const result of results) {
     if (!result.success || !result.data?.analysis) {
@@ -229,10 +255,16 @@ export function exportFilteredToExcel(results: AnalysisResult[]): void {
     const parsed = parseAspects(analysisText);
     parsedResults.push({ fileName: result.fileName, parsed });
 
-    if (parsed.aspects.length > maxAspects) {
-      maxAspects = parsed.aspects.length;
+    // Collect all unique aspect titles
+    for (const aspect of parsed.aspects) {
+      if (aspect.aspectTitle) {
+        aspectTitlesSet.add(aspect.aspectTitle);
+      }
     }
   }
+
+  // Convert to sorted array for consistent column ordering
+  const aspectTitles = Array.from(aspectTitlesSet).sort();
 
   // Build rows with dynamic columns (filtered content)
   const rows: any[] = [];
@@ -245,19 +277,22 @@ export function exportFilteredToExcel(results: AnalysisResult[]): void {
     } else if (!parsed.hasAspects || parsed.aspects.length === 0) {
       row['Note'] = 'No aspects found';
     } else {
-      // Add each aspect with only subsection (a) filtered
-      for (let i = 0; i < parsed.aspects.length; i++) {
-        const aspect = parsed.aspects[i];
-        const aspectNum = i + 1;
-        const baseTitle = aspect.aspectTitle || `Aspect ${aspectNum}`;
+      // Create a map of aspect titles to their filtered content for this file
+      const aspectMap = new Map<string, string>();
+
+      for (const aspect of parsed.aspects) {
+        const title = aspect.aspectTitle || '';
 
         // Only include subsection (a), filtered before dash
-        if (aspect.subsectionA) {
+        if (title && aspect.subsectionA) {
           const filtered = filterBeforeDash(aspect.subsectionA);
-          row[baseTitle] = filtered;
-        } else {
-          row[baseTitle] = '';
+          aspectMap.set(title, filtered);
         }
+      }
+
+      // Add columns for each standardized aspect title
+      for (const aspectTitle of aspectTitles) {
+        row[aspectTitle] = aspectMap.get(aspectTitle) || '';
       }
     }
 
@@ -269,7 +304,7 @@ export function exportFilteredToExcel(results: AnalysisResult[]): void {
 
   // Set column widths (FileName + dynamic aspect columns)
   const colWidths = [{ wch: 30 }]; // File Name column
-  for (let i = 0; i < maxAspects; i++) {
+  for (let i = 0; i < aspectTitles.length; i++) {
     colWidths.push({ wch: 50 }); // Narrower columns since content is shorter
   }
   worksheet['!cols'] = colWidths;
