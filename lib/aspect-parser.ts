@@ -42,8 +42,8 @@ export function parseAspects(analysisText: string): ParsedAnalysis {
 
   const trimmedText = analysisText.trim();
 
-  // Check if the text contains aspect markers
-  const aspectRegex = /Aspect\s*\((\d+)\)/gi;
+  // Check if the text contains aspect markers (with optional markdown headers ###)
+  const aspectRegex = /###\s+Aspect\s+\(\d+\)\s+-\s+/gi;
   const hasAspects = aspectRegex.test(trimmedText);
 
   if (!hasAspects) {
@@ -56,27 +56,29 @@ export function parseAspects(analysisText: string): ParsedAnalysis {
   }
 
   // Extract title (everything before first Aspect)
-  const firstAspectMatch = trimmedText.match(/Aspect\s*\(\d+\)/i);
+  const firstAspectMatch = trimmedText.match(/###\s+Aspect\s+\(\d+\)\s+-\s+/i);
   const title = firstAspectMatch
     ? trimmedText.substring(0, firstAspectMatch.index).trim()
     : '';
 
   // Split by aspect boundaries
-  const aspectSplitRegex = /(?=Aspect\s*\(\d+\))/gi;
-  const aspectSections = trimmedText.split(aspectSplitRegex).filter(s => s.trim().length > 0);
+  const aspectSplitRegex = /(?=###\s+Aspect\s+\(\d+\)\s+-\s+)/gi;
+  const aspectSections = trimmedText
+    .split(aspectSplitRegex)
+    .filter(s => s.trim().length > 0);
 
   const aspects: ParsedAspect[] = [];
 
   for (const section of aspectSections) {
     const sectionTrimmed = section.trim();
 
-    // Skip if it doesn't start with Aspect
-    if (!/^Aspect\s*\(\d+\)/i.test(sectionTrimmed)) {
+    // Skip if it doesn't start with ### Aspect
+    if (!/^###\s+Aspect\s+\(\d+\)\s+-\s+/i.test(sectionTrimmed)) {
       continue;
     }
 
     // Extract aspect number and title
-    const aspectHeaderMatch = sectionTrimmed.match(/^Aspect\s*\((\d+)\)\s*[-–—]\s*(.+?)$/im);
+    const aspectHeaderMatch = sectionTrimmed.match(/^###\s+Aspect\s+\((\d+)\)\s+-\s+(.+?)$/im);
 
     if (!aspectHeaderMatch) {
       continue;
@@ -114,7 +116,7 @@ export function parseAspects(analysisText: string): ParsedAnalysis {
 function extractSubsection(text: string, subsectionLabel: string): string {
   // Match pattern: (a) or (b) or (c) followed by content until next subsection or end
   const pattern = new RegExp(
-    `\\(${subsectionLabel}\\)\\s*([\\s\\S]*?)(?=\\([a-z]\\)|$)`,
+    `\\(${subsectionLabel}\\)\\s+([\\s\\S]*?)(?=\\n\\([a-z]\\)\\s+|$)`,
     'i'
   );
 
@@ -133,7 +135,7 @@ function extractSubsection(text: string, subsectionLabel: string): string {
  */
 export function hasAspectStructure(text: string): boolean {
   if (!text) return false;
-  const aspectRegex = /Aspect\s*\(\d+\)/i;
+  const aspectRegex = /(?:###\s+)?Aspect\s*\(\d+\)/i;;
   return aspectRegex.test(text);
 }
 
