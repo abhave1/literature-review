@@ -42,6 +42,3 @@ next-env.d.ts
 *output
 *test-parser.js
 .env*.local
-
-
-*
