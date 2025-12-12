@@ -90,11 +90,22 @@ export class AsuAimlClient {
    * @param options - Query options including model parameters, search params, etc.
    */
   async query(query: string, options?: any): Promise<any> {
-    const payload = {
+    const payload: any = {
       action: 'query',
       query,
       ...options,
     };
+
+    // Handle system prompt override logic
+    if (options?.systemPrompt) {
+      payload.request_source = "override_params";
+      // Ensure model_params exists
+      payload.model_params = payload.model_params || {};
+      // Set the system prompt
+      payload.model_params.system_prompt = options.systemPrompt;
+      // Remove systemPrompt from top-level to clean up
+      delete payload.systemPrompt;
+    }
 
     const response = await fetch(`${this.baseUrl}/query`, {
       method: 'POST',

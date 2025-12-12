@@ -187,3 +187,56 @@ export async function extractTextFromPDFs(
 
   return results;
 }
+
+/**
+ * Extract text from an ArrayBuffer (for use with fetched blobs)
+ */
+export async function extractTextFromBuffer(
+  buffer: ArrayBuffer | Buffer,
+  fileName: string
+): Promise<{
+  text: string;
+  metadata: {
+    pageCount: number;
+    title?: string;
+    author?: string;
+  };
+}> {
+  // Ensure parser is initialized
+  if (!isInitialized) {
+    await initPDFParser();
+  }
+
+  if (!window.PDFParse) {
+    throw new Error('PDFParse not loaded. Please refresh the page.');
+  }
+
+  try {
+    // Ensure we have an ArrayBuffer
+    const data = buffer instanceof Buffer ? buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) : buffer;
+
+    // Create parser instance with the PDF data
+    const parser = new window.PDFParse({ data });
+
+    // Get document info
+    const info = await parser.getInfo({ parsePageInfo: true });
+
+    // Extract all text
+    const textResult = await parser.getText();
+
+    // Clean up
+    await parser.destroy();
+
+    return {
+      text: textResult.text || '',
+      metadata: {
+        pageCount: info.total || 0,
+        title: info.info?.Title,
+        author: info.info?.Author,
+      },
+    };
+  } catch (error) {
+    console.error(`Failed to extract text from ${fileName}:`, error);
+    throw new Error(`Failed to parse PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}

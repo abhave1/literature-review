@@ -28,6 +28,20 @@ export default function AnalysisResults({
   successCount,
   failureCount,
 }: AnalysisResultsProps) {
+  const [openIndexes, setOpenIndexes] = useState<Set<number>>(new Set());
+
+  const toggleOpen = (index: number) => {
+    setOpenIndexes(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  };
+
   const downloadResults = () => {
     const dataStr = JSON.stringify(results, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
@@ -160,11 +174,18 @@ export default function AnalysisResults({
         {results.map((result, index) => (
           <details
             key={index}
+            open={openIndexes.has(index)}
             className={`border rounded-lg overflow-hidden ${
               result.success ? 'border-green-200' : 'border-red-200'
             }`}
           >
-            <summary className="p-3 bg-white cursor-pointer hover:bg-gray-50 transition-colors list-none">
+            <summary
+              onClick={(e) => {
+                e.preventDefault();
+                toggleOpen(index);
+              }}
+              className="p-3 bg-white cursor-pointer hover:bg-gray-50 transition-colors list-none"
+            >
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <h3 className="text-sm font-medium text-black truncate" title={result.fileName}>
@@ -202,7 +223,9 @@ export default function AnalysisResults({
                     </svg>
                   )}
                   <svg
-                    className="w-4 h-4 text-black transition-transform [[open]>&]:rotate-90"
+                    className={`w-4 h-4 text-black transition-transform duration-200 ${
+                      openIndexes.has(index) ? 'rotate-90' : 'rotate-0'
+                    }`}
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"

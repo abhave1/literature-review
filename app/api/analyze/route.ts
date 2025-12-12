@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const files: FileInput[] = body.files;
     const ratedAspects: string | undefined = body.ratedAspects;
+    const useMxmlPrompt: boolean = body.useMxmlPrompt || false;
 
     if (!files || files.length === 0) {
       return NextResponse.json(
@@ -42,13 +43,14 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`Received ${files.length} files for analysis`);
+    console.log(`Using MxML prompt: ${useMxmlPrompt}`);
     if (ratedAspects) {
       console.log(`Using rated aspects: ${ratedAspects.substring(0, 100)}...`);
     }
 
     // Process all files in parallel
     const results = await Promise.all(
-      files.map((file) => analyzeText(file, ratedAspects))
+      files.map((file) => analyzeText(file, ratedAspects, useMxmlPrompt))
     );
 
     // Return results
@@ -72,7 +74,11 @@ export async function POST(request: NextRequest) {
  * Analyze extracted text with ASU AIML API
  * Text extraction is done client-side, so this only handles the AI analysis
  */
-async function analyzeText(file: FileInput, ratedAspects?: string): Promise<AnalysisResult> {
+async function analyzeText(
+  file: FileInput,
+  ratedAspects?: string,
+  useMxmlPrompt: boolean = false
+): Promise<AnalysisResult> {
   const { fileName, text, metadata, extractionSuccess, extractionError } = file;
 
   try {
@@ -97,13 +103,84 @@ async function analyzeText(file: FileInput, ratedAspects?: string): Promise<Anal
     console.log(`Analyzing ${fileName} (${text.length} characters)...`);
 
     // Build the prompt with optional rated aspects
-    let prompt = `From the extracted text below, according to your system prompt given to you, analyze the text and output your conclusion.`;
+    let prompt = '';
+    let systemPromptToUse = undefined;
 
-    if (ratedAspects) {
-      prompt += `\n\nHere are your rated aspects:\n${ratedAspects}`;
+    if (useMxmlPrompt) {
+        // MxML mode: Use the MxML system prompt template with rated aspects
+        systemPromptToUse = `You are a systematic review expert tasked with reviewing a number of published papers according to the rules given below. For each given article, carefully go through all the contents in the file.
+
+Find the specifications of (1) the Rated Aspects, (2) the operational definition of Measurement, and (3) the operational definition of Machine Learning (ML).
+
+---------------------------------------
+Rated Aspects:
+
+${ratedAspects || '[No rated aspects provided]'}
+
+---------------------------------------
+Operational definition of Measurement:
+
+As opposed to physical measurement, Measurement in education and psychology involves assigning numbers to individuals to represent the studied properties and drawing general conclusions based on limited samples. In this study, we use the narrow definition of Measurement, one that requires explicit attention to engineering a measurement instrument or environment that collects behavioral data so as to assign quantitative scores or labels of prespecified latent constructs to individuals.
+
+---------------------------------------
+Operational definition of Machine Learning (ML):
+
+In this study, we adopted the following two principles to define ML methods:
+
+- A computer program is said to learn from experience E with respect to some classes of tasks T and performance measures P, if its performance at tasks T, as measured by P, improves with experience E."In the ML context, T typically represents an algorithm that processes an example (i.e., input data features) to generate an output for the desired task (e.g., prediction, cluster label), P is a loss function (e.g., test-set misclassification rate, likelihood of data given latent clustering representation) that quantifies the algorithm's performance, and E is a dataset with a collection of ob-servations, from which the algorithm is built. Depending on the type of experience (E), many ML algorithms can be divided into unsupervised learning and supervised learning algorithms. Unsupervised learning (e.g., clustering, dimension reduction) algorithms experience a data set containing many features to learn useful properties of the structure of this dataset. Supervised learning algorithms experience a dataset containing features plus a target for each observation, with the goal of accurate prediction of the target based on the features.
+
+- The method addresses typical computational or statistical challenges encountered in ML applications, for instance, large N (sample size/item pool size), where traditional optimization/estimation methods could become computationally intensive or infeasible, and large P (large number of model parameters/latent dimensions), which requires thoughtful decisions on the model's capacity (e.g., via regularization) to produce algorithms orinferences that generalize well to new, unseen data.
+
+---------------------------------------
+General instructions:
+
+Follow the same format for each and EVERY rated aspect.
+
+DO NOT FORGET OR EXCLUDE ANY OF THE PROVIDED RATED ASPECTS.
+
+IMPORTANT: You MUST address EVERY SINGLE rated aspect listed above, even if the answer is "Not applicable" or "Not addressed in the paper". Do not skip any aspect numbers. Go through each aspect systematically (from 1 to however many are listed).
+
+After all your reasoning, add your compiled response in this format in markdown, with consistent spacing, no icons or emojis. If you don't have enough information to answer a question, don't guess, but rather pose that as a question and don't answer it or make a probabilistic guess. DO NOT include spacers between your aspects, include every single necessary markdown character (eg. new line, tabs, dashes etc.) to preserve formatting. DO NOT include [cite: start] tags or any file citation tags.
+
+The format of your response should be:
+
+## [Title of the paper being reviewed]
+### Aspect (1) - [Rated question]
+(a) [Yes, No, or Maybe where applicable, or the actual conclusion that matches with the question asked] - [Conclusion made for the rated aspect from the provided text]
+(b) [Explanation that provides a step-by-step rationale and reasoning chain from you, the LLM, as to why you decided to make this conclusion]
+(c) [Evidence that you used for your chain of thought reasoning. Cite the location of the evidence by page number or section heading. Quote relevant text when possible. DO NOT use filecite tags or any link to the file. Only cite by writing plain text.]
+
+DO NOT deviate from this format in your response.
+
+CRITICAL: Use "Aspect (1)" with parentheses around the number, NOT "Aspect [1]" with square brackets. The aspect number must be in parentheses.
+
+Example of a good formatted response:
+
+### Aspect (1) - Does the paper report on automated scoring methods?
+(a) Yes - the paper reports implementations of automated scoring using machine learning methods for text items.
+
+(b) The abstract and introduction state that the study explores machine learning approaches for automated essay scoring. The methods section describes the ML algorithms implemented and evaluated. The results section provides detailed performance metrics of the automated scoring system.
+
+(c) "This study explores machine learning methods for automated essay scoring... Using neural network architectures, the research presents various scoring models..." "The system achieved a correlation of 0.82 with human raters." Located in the Abstract and Results sections.
+
+### Aspect (2) - Does the paper address construct validation?
+(a) No - the paper's main purpose is to develop a scoring algorithm, not to provide construct validity evidence.
+
+(b) While the paper mentions the construct being measured, it does not focus on validating whether the automated scores reflect the intended construct. The emphasis is on predictive accuracy rather than construct validity.
+
+(c) Evidence: "This study aimed at testing the accuracy of the automated scoring model in terms of agreement with human raters." The paper focuses on inter-rater reliability rather than construct validation.`;
+
+        prompt = `Here is the extracted text to analyze:\n\n${text}`;
+    } else {
+        // Legacy/ICAP mode: Construct the prompt manually if no system override
+        prompt = `From the extracted text below, according to your system prompt given to you, analyze the text and output your conclusion.`;
+
+        if (ratedAspects) {
+          prompt += `\n\nHere are your rated aspects:\n${ratedAspects}`;
+        }
+
+        prompt += `\n\nHere is the extracted text:\n${text}`;
     }
-
-    prompt += `\n\nHere is the extracted text:\n${text}`;
 
     const analysisResult = await asuAimlClient.query(prompt, {
       model_provider: 'gcp-deepmind',
@@ -111,6 +188,7 @@ async function analyzeText(file: FileInput, ratedAspects?: string): Promise<Anal
       model_params: {
         temperature: 0.7,
       },
+      systemPrompt: systemPromptToUse // Pass the override if it exists
     });
 
     console.log(`Analysis complete for ${fileName}`);
