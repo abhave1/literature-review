@@ -1,8 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import AccessKeyPrompt from '@/components/AccessKeyPrompt';
 import AnalysisResults from '@/components/AnalysisResults';
+import FileUpload from '@/components/FileUpload';
+import DriveFolderPicker, { ConnectionStatus } from '@/components/DriveFolderPicker';
+import DriveSyncButton, { SyncStatus } from '@/components/DriveSyncButton';
 
 interface BlobFile {
   url: string;
@@ -10,6 +13,12 @@ interface BlobFile {
   size: number;
   uploadedAt: string;
   name: string;
+}
+
+interface SyncProgress {
+  current: number;
+  total: number;
+  currentFileName?: string;
 }
 
 interface AnalysisResult {
@@ -95,6 +104,24 @@ export default function MxMLPage() {
   // Prompt Inputs
   const [ratedAspects, setRatedAspects] = useState<string>(DEFAULT_ASPECTS);
 
+  // Google Drive Sync state
+  const [driveConnectionStatus, setDriveConnectionStatus] = useState<ConnectionStatus>('disconnected');
+  const [connectedFolderId, setConnectedFolderId] = useState<string>('');
+  const [connectedFolderName, setConnectedFolderName] = useState<string>('');
+  const [driveError, setDriveError] = useState<string>('');
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
+  const [syncProgress, setSyncProgress] = useState<SyncProgress>({ current: 0, total: 0 });
+  const [syncError, setSyncError] = useState<string>('');
+  const [showDriveSync, setShowDriveSync] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Local upload state
+  const [showLocalUpload, setShowLocalUpload] = useState(false);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
+  const [uploadError, setUploadError] = useState<string>('');
+
   // 1. Auth Check
   useEffect(() => {
     const storedKey = localStorage.getItem('app_access_key');
@@ -163,6 +190,236 @@ export default function MxMLPage() {
       const next = new Set(selectedFiles);
       filteredFiles.forEach(f => next.add(f.url));
       setSelectedFiles(next);
+    }
+  };
+
+  // Google Drive folder selection handler
+  const handleFolderSelected = useCallback(async (folderId: string) => {
+    setDriveConnectionStatus('connecting');
+    setDriveError('');
+
+    try {
+      // Test the folder connection by checking Drive status
+      const statusRes = await fetch(`/api/drive/status?folderId=${encodeURIComponent(folderId)}&includeFileCount=true`);
+      const statusData = await statusRes.json();
+
+      if (!statusRes.ok) {
+        throw new Error(statusData.error || 'Failed to connect to folder');
+      }
+
+      if (!statusData.authenticated) {
+        // Need to authenticate first
+        const authRes = await fetch('/api/drive/auth?action=login&popup=true');
+        const authData = await authRes.json();
+
+        if (authData.authUrl) {
+          // Open OAuth popup
+          const popup = window.open(authData.authUrl, 'Google Drive Auth', 'width=600,height=700');
+
+          // Listen for auth completion
+          const handleMessage = (event: MessageEvent) => {
+            if (event.data?.type === 'GOOGLE_AUTH_SUCCESS') {
+              window.removeEventListener('message', handleMessage);
+              // Retry folder connection after auth
+              handleFolderSelected(folderId);
+            }
+          };
+          window.addEventListener('message', handleMessage);
+
+          // Clean up if popup is closed without auth
+          const checkClosed = setInterval(() => {
+            if (popup?.closed) {
+              clearInterval(checkClosed);
+              window.removeEventListener('message', handleMessage);
+              setDriveConnectionStatus('disconnected');
+            }
+          }, 1000);
+
+          return;
+        }
+
+        throw new Error('Google Drive authentication required but no auth URL returned');
+      }
+
+      // Successfully connected
+      setConnectedFolderId(folderId);
+      setConnectedFolderName(statusData.drive?.fileCount !== undefined
+        ? `Folder with ${statusData.drive.fileCount} PDFs`
+        : `Folder ${folderId.slice(0, 8)}...`
+      );
+      setDriveConnectionStatus('connected');
+    } catch (err) {
+      console.error('Drive connection error:', err);
+      setDriveError(err instanceof Error ? err.message : 'Failed to connect to Google Drive folder');
+      setDriveConnectionStatus('error');
+    }
+  }, []);
+
+  // Google Drive disconnect handler
+  const handleDriveDisconnect = useCallback(() => {
+    setDriveConnectionStatus('disconnected');
+    setConnectedFolderId('');
+    setConnectedFolderName('');
+    setDriveError('');
+    setSyncStatus('idle');
+    setSyncProgress({ current: 0, total: 0 });
+    setSyncError('');
+  }, []);
+
+  // Google Drive sync trigger handler
+  const handleTriggerSync = useCallback(async () => {
+    if (!connectedFolderId) {
+      setSyncError('No folder selected');
+      return;
+    }
+
+    // Reset state
+    setSyncStatus('connecting');
+    setSyncProgress({ current: 0, total: 0 });
+    setSyncError('');
+
+    // Create abort controller for cancellation
+    abortControllerRef.current = new AbortController();
+
+    try {
+      const response = await fetch('/api/drive/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          folderId: connectedFolderId,
+          skipExisting: true,
+        }),
+        signal: abortControllerRef.current.signal,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Sync failed');
+      }
+
+      // Handle SSE stream
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response stream available');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('event:')) {
+            const eventType = line.replace('event:', '').trim();
+            continue;
+          }
+          if (line.startsWith('data:')) {
+            try {
+              const data = JSON.parse(line.replace('data:', '').trim());
+
+              // Update state based on event type
+              if (data.phase === 'listing') {
+                setSyncStatus('listing');
+              } else if (data.phase === 'syncing' || data.progress) {
+                setSyncStatus('downloading');
+                if (data.progress) {
+                  setSyncProgress({
+                    current: data.progress.synced + data.progress.skipped + data.progress.errors,
+                    total: data.progress.total,
+                    currentFileName: data.fileName,
+                  });
+                }
+              }
+
+              // Handle completion
+              if (data.message === 'Sync completed successfully' || data.phase === 'listing_complete' && data.totalFiles === 0) {
+                setSyncStatus('complete');
+                if (data.syncedFiles !== undefined) {
+                  setSyncProgress(prev => ({
+                    ...prev,
+                    current: data.syncedFiles + (data.skippedFiles || 0),
+                    total: data.totalFiles || prev.total,
+                  }));
+                }
+                // Refresh file list after sync
+                loadFiles();
+              }
+
+              // Handle fatal errors
+              if (data.error && !data.fileName) {
+                setSyncError(data.error);
+                setSyncStatus('error');
+              }
+            } catch {
+              // Ignore parse errors for malformed SSE data
+            }
+          }
+        }
+      }
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') {
+        setSyncStatus('cancelled');
+      } else {
+        console.error('Sync error:', err);
+        setSyncError(err instanceof Error ? err.message : 'Sync failed');
+        setSyncStatus('error');
+      }
+    } finally {
+      abortControllerRef.current = null;
+    }
+  }, [connectedFolderId]);
+
+  // Google Drive sync cancel handler
+  const handleCancelSync = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+  }, []);
+
+  // Local upload handler
+  const handleLocalUpload = async () => {
+    if (uploadFiles.length === 0) return;
+
+    setIsUploading(true);
+    setUploadError('');
+    setUploadProgress({ current: 0, total: uploadFiles.length });
+
+    try {
+      const formData = new FormData();
+      uploadFiles.forEach(file => {
+        formData.append('files', file);
+      });
+
+      const res = await fetch('/api/upload-to-blob', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Upload failed');
+      }
+
+      setUploadProgress({ current: data.successCount, total: data.totalFiles });
+
+      if (data.failCount > 0) {
+        setUploadError(`${data.failCount} file(s) failed to upload`);
+      }
+
+      // Clear files and refresh list
+      setUploadFiles([]);
+      loadFiles();
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -294,6 +551,147 @@ export default function MxMLPage() {
               disabled={isProcessing}
             />
           </div>
+        </section>
+
+        {/* Google Drive Sync Section */}
+        <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div
+            className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center cursor-pointer hover:bg-gray-100 transition-colors"
+            onClick={() => setShowDriveSync(!showDriveSync)}
+          >
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                <svg className="w-5 h-5 text-gray-500" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M7.71 3.5L1.15 15l4.58 8h13.54l4.58-8L17.29 3.5H7.71zm-.53 1h10.64l5.14 9H2.04l5.14-9zm5.32 2.5L7.36 14h10.28L12.5 7z"/>
+                </svg>
+                Sync from Google Drive
+                {driveConnectionStatus === 'connected' && (
+                  <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">Connected</span>
+                )}
+              </h2>
+              <p className="text-sm text-gray-500">Import PDFs directly from a Google Drive folder.</p>
+            </div>
+            <svg
+              className={`w-5 h-5 text-gray-400 transition-transform ${showDriveSync ? 'rotate-180' : ''}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+
+          {showDriveSync && (
+            <div className="p-6 space-y-6">
+              {/* Folder Picker */}
+              <DriveFolderPicker
+                onFolderSelected={handleFolderSelected}
+                onDisconnect={handleDriveDisconnect}
+                connectionStatus={driveConnectionStatus}
+                connectedFolderName={connectedFolderName}
+                error={driveError}
+              />
+
+              {/* Sync Button - only show when connected */}
+              {driveConnectionStatus === 'connected' && (
+                <DriveSyncButton
+                  syncStatus={syncStatus}
+                  progress={syncProgress}
+                  error={syncError}
+                  disabled={isProcessing}
+                  onTriggerSync={handleTriggerSync}
+                  onCancelSync={handleCancelSync}
+                  onSyncComplete={() => {
+                    // Refresh file list after sync completes
+                    loadFiles();
+                  }}
+                />
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* Upload Local Files Section */}
+        <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div
+            className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center cursor-pointer hover:bg-gray-100 transition-colors"
+            onClick={() => setShowLocalUpload(!showLocalUpload)}
+          >
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                Upload Local Files
+                {uploadFiles.length > 0 && (
+                  <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">{uploadFiles.length} selected</span>
+                )}
+              </h2>
+              <p className="text-sm text-gray-500">Upload PDFs from your computer to the storage.</p>
+            </div>
+            <svg
+              className={`w-5 h-5 text-gray-400 transition-transform ${showLocalUpload ? 'rotate-180' : ''}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+
+          {showLocalUpload && (
+            <div className="p-6 space-y-4">
+              <FileUpload
+                onFilesSelected={setUploadFiles}
+                isProcessing={isUploading}
+              />
+
+              {uploadFiles.length > 0 && (
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={handleLocalUpload}
+                    disabled={isUploading}
+                    className={`
+                      px-6 py-2 rounded-lg font-medium text-white transition-all
+                      ${isUploading
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'}
+                    `}
+                  >
+                    {isUploading ? (
+                      <span className="flex items-center gap-2">
+                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Uploading...
+                      </span>
+                    ) : (
+                      `Upload ${uploadFiles.length} Files to Storage`
+                    )}
+                  </button>
+
+                  {isUploading && uploadProgress.total > 0 && (
+                    <span className="text-sm text-gray-500">
+                      {uploadProgress.current} / {uploadProgress.total}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {uploadError && (
+                <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg border border-red-200 text-sm">
+                  {uploadError}
+                </div>
+              )}
+
+              {!isUploading && uploadProgress.current > 0 && !uploadError && (
+                <div className="bg-green-50 text-green-700 px-4 py-3 rounded-lg border border-green-200 text-sm">
+                  Successfully uploaded {uploadProgress.current} files!
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         {/* Step 2: File Selection */}
