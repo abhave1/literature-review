@@ -848,6 +848,7 @@ export default function MxMLPage() {
               totalFiles={selectedFiles.size}
               successCount={results.filter(r => r.success).length}
               failureCount={results.filter(r => !r.success).length}
+              ratedAspects={ratedAspects}
             />
           </div>
         )}

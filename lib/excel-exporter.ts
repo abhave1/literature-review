@@ -4,7 +4,7 @@
  */
 
 import * as XLSX from 'xlsx';
-import { parseAspects, ParsedAnalysis } from './aspect-parser';
+import { parseAspects, ParsedAnalysis, parseRatedAspects, AspectDefinition } from './aspect-parser';
 
 interface AnalysisResult {
   fileName: string;
@@ -20,11 +20,16 @@ interface AnalysisResult {
 /**
  * Export analysis results to Excel file
  * One row per PDF, with aspects as columns
+ * @param results - Analysis results from the API
+ * @param ratedAspects - Original rated aspects text from the prompt (used for fixed column headers)
  */
-export function exportToExcel(results: AnalysisResult[]): void {
-  // First pass: parse all results and collect unique aspect titles
+export function exportToExcel(results: AnalysisResult[], ratedAspects?: string): void {
+  // Parse the rated aspects from the prompt to get fixed column headers
+  const aspectDefinitions = ratedAspects ? parseRatedAspects(ratedAspects) : [];
+  const useFixedColumns = aspectDefinitions.length > 0;
+
+  // First pass: parse all results
   const parsedResults: Array<{ fileName: string; parsed: ParsedAnalysis; error?: string }> = [];
-  const aspectTitlesSet = new Set<string>();
 
   for (const result of results) {
     if (!result.success || !result.data?.analysis) {
@@ -42,19 +47,32 @@ export function exportToExcel(results: AnalysisResult[]): void {
 
     const parsed = parseAspects(analysisText);
     parsedResults.push({ fileName: result.fileName, parsed });
-
-    // Collect all unique aspect titles
-    for (const aspect of parsed.aspects) {
-      if (aspect.aspectTitle) {
-        aspectTitlesSet.add(aspect.aspectTitle);
-      }
-    }
   }
 
-  // Convert to sorted array for consistent column ordering
-  const aspectTitles = Array.from(aspectTitlesSet).sort();
+  // Get column headers - either from prompt or dynamically from results
+  let aspectColumns: { number: number; title: string }[];
 
-  // Build rows with dynamic columns
+  if (useFixedColumns) {
+    // Use fixed column headers from the prompt, sorted by aspect number
+    aspectColumns = aspectDefinitions
+      .sort((a, b) => a.number - b.number)
+      .map(def => ({ number: def.number, title: def.title }));
+  } else {
+    // Fallback: collect unique aspect titles from results (old behavior)
+    const aspectTitlesSet = new Set<string>();
+    for (const { parsed } of parsedResults) {
+      for (const aspect of parsed.aspects) {
+        if (aspect.aspectTitle) {
+          aspectTitlesSet.add(aspect.aspectTitle);
+        }
+      }
+    }
+    aspectColumns = Array.from(aspectTitlesSet)
+      .sort()
+      .map((title, i) => ({ number: i + 1, title }));
+  }
+
+  // Build rows with fixed columns
   const rows: any[] = [];
 
   for (const { fileName, parsed, error } of parsedResults) {
@@ -65,12 +83,10 @@ export function exportToExcel(results: AnalysisResult[]): void {
     } else if (!parsed.hasAspects || parsed.aspects.length === 0) {
       row['Note'] = 'No aspects found';
     } else {
-      // Create a map of aspect titles to their content for this file
-      const aspectMap = new Map<string, string>();
+      // Create a map of aspect NUMBER to content for this file
+      const aspectByNumber = new Map<number, string>();
 
       for (const aspect of parsed.aspects) {
-        const title = aspect.aspectTitle || '';
-
         // Combine all subsections with labels
         let combinedContent = '';
         if (aspect.subsectionA) {
@@ -83,14 +99,13 @@ export function exportToExcel(results: AnalysisResult[]): void {
           combinedContent += combinedContent ? `\n\n(c) ${aspect.subsectionC}` : `(c) ${aspect.subsectionC}`;
         }
 
-        if (title) {
-          aspectMap.set(title, combinedContent);
-        }
+        // Store by aspect NUMBER for consistent matching
+        aspectByNumber.set(aspect.aspectNumber, combinedContent);
       }
 
-      // Add columns for each standardized aspect title
-      for (const aspectTitle of aspectTitles) {
-        row[aspectTitle] = aspectMap.get(aspectTitle) || '';
+      // Add columns using the fixed aspect titles, matched by number
+      for (const col of aspectColumns) {
+        row[col.title] = aspectByNumber.get(col.number) || '';
       }
     }
 
@@ -100,9 +115,9 @@ export function exportToExcel(results: AnalysisResult[]): void {
   // Create worksheet
   const worksheet = XLSX.utils.json_to_sheet(rows);
 
-  // Set column widths (FileName + dynamic aspect columns)
+  // Set column widths (FileName + aspect columns)
   const colWidths = [{ wch: 30 }]; // File Name column
-  for (let i = 0; i < aspectTitles.length; i++) {
+  for (let i = 0; i < aspectColumns.length; i++) {
     colWidths.push({ wch: 80 }); // Wider columns for combined content
   }
   worksheet['!cols'] = colWidths;
@@ -121,11 +136,16 @@ export function exportToExcel(results: AnalysisResult[]): void {
 /**
  * Export analysis results to CSV file
  * One row per PDF, with aspects as columns (same as Excel)
+ * @param results - Analysis results from the API
+ * @param ratedAspects - Original rated aspects text from the prompt (used for fixed column headers)
  */
-export function exportToCSV(results: AnalysisResult[]): void {
-  // First pass: parse all results and collect unique aspect titles
+export function exportToCSV(results: AnalysisResult[], ratedAspects?: string): void {
+  // Parse the rated aspects from the prompt to get fixed column headers
+  const aspectDefinitions = ratedAspects ? parseRatedAspects(ratedAspects) : [];
+  const useFixedColumns = aspectDefinitions.length > 0;
+
+  // First pass: parse all results
   const parsedResults: Array<{ fileName: string; parsed: ParsedAnalysis; error?: string }> = [];
-  const aspectTitlesSet = new Set<string>();
 
   for (const result of results) {
     if (!result.success || !result.data?.analysis) {
@@ -143,19 +163,32 @@ export function exportToCSV(results: AnalysisResult[]): void {
 
     const parsed = parseAspects(analysisText);
     parsedResults.push({ fileName: result.fileName, parsed });
-
-    // Collect all unique aspect titles
-    for (const aspect of parsed.aspects) {
-      if (aspect.aspectTitle) {
-        aspectTitlesSet.add(aspect.aspectTitle);
-      }
-    }
   }
 
-  // Convert to sorted array for consistent column ordering
-  const aspectTitles = Array.from(aspectTitlesSet).sort();
+  // Get column headers - either from prompt or dynamically from results
+  let aspectColumns: { number: number; title: string }[];
 
-  // Build rows with dynamic columns
+  if (useFixedColumns) {
+    // Use fixed column headers from the prompt, sorted by aspect number
+    aspectColumns = aspectDefinitions
+      .sort((a, b) => a.number - b.number)
+      .map(def => ({ number: def.number, title: def.title }));
+  } else {
+    // Fallback: collect unique aspect titles from results (old behavior)
+    const aspectTitlesSet = new Set<string>();
+    for (const { parsed } of parsedResults) {
+      for (const aspect of parsed.aspects) {
+        if (aspect.aspectTitle) {
+          aspectTitlesSet.add(aspect.aspectTitle);
+        }
+      }
+    }
+    aspectColumns = Array.from(aspectTitlesSet)
+      .sort()
+      .map((title, i) => ({ number: i + 1, title }));
+  }
+
+  // Build rows with fixed columns
   const rows: any[] = [];
 
   for (const { fileName, parsed, error } of parsedResults) {
@@ -166,12 +199,10 @@ export function exportToCSV(results: AnalysisResult[]): void {
     } else if (!parsed.hasAspects || parsed.aspects.length === 0) {
       row['Note'] = 'No aspects found';
     } else {
-      // Create a map of aspect titles to their content for this file
-      const aspectMap = new Map<string, string>();
+      // Create a map of aspect NUMBER to content for this file
+      const aspectByNumber = new Map<number, string>();
 
       for (const aspect of parsed.aspects) {
-        const title = aspect.aspectTitle || '';
-
         // Combine all subsections with labels
         let combinedContent = '';
         if (aspect.subsectionA) {
@@ -184,14 +215,13 @@ export function exportToCSV(results: AnalysisResult[]): void {
           combinedContent += combinedContent ? `\n\n(c) ${aspect.subsectionC}` : `(c) ${aspect.subsectionC}`;
         }
 
-        if (title) {
-          aspectMap.set(title, combinedContent);
-        }
+        // Store by aspect NUMBER for consistent matching
+        aspectByNumber.set(aspect.aspectNumber, combinedContent);
       }
 
-      // Add columns for each standardized aspect title
-      for (const aspectTitle of aspectTitles) {
-        row[aspectTitle] = aspectMap.get(aspectTitle) || '';
+      // Add columns using the fixed aspect titles, matched by number
+      for (const col of aspectColumns) {
+        row[col.title] = aspectByNumber.get(col.number) || '';
       }
     }
 
@@ -232,11 +262,16 @@ function filterBeforeDash(text: string): string {
 /**
  * Export filtered analysis results to Excel file (answers only, no reasoning)
  * Removes everything after " - " in each response
+ * @param results - Analysis results from the API
+ * @param ratedAspects - Original rated aspects text from the prompt (used for fixed column headers)
  */
-export function exportFilteredToExcel(results: AnalysisResult[]): void {
-  // First pass: parse all results and collect unique aspect titles
+export function exportFilteredToExcel(results: AnalysisResult[], ratedAspects?: string): void {
+  // Parse the rated aspects from the prompt to get fixed column headers
+  const aspectDefinitions = ratedAspects ? parseRatedAspects(ratedAspects) : [];
+  const useFixedColumns = aspectDefinitions.length > 0;
+
+  // First pass: parse all results
   const parsedResults: Array<{ fileName: string; parsed: ParsedAnalysis; error?: string }> = [];
-  const aspectTitlesSet = new Set<string>();
 
   for (const result of results) {
     if (!result.success || !result.data?.analysis) {
@@ -254,19 +289,32 @@ export function exportFilteredToExcel(results: AnalysisResult[]): void {
 
     const parsed = parseAspects(analysisText);
     parsedResults.push({ fileName: result.fileName, parsed });
-
-    // Collect all unique aspect titles
-    for (const aspect of parsed.aspects) {
-      if (aspect.aspectTitle) {
-        aspectTitlesSet.add(aspect.aspectTitle);
-      }
-    }
   }
 
-  // Convert to sorted array for consistent column ordering
-  const aspectTitles = Array.from(aspectTitlesSet).sort();
+  // Get column headers - either from prompt or dynamically from results
+  let aspectColumns: { number: number; title: string }[];
 
-  // Build rows with dynamic columns (filtered content)
+  if (useFixedColumns) {
+    // Use fixed column headers from the prompt, sorted by aspect number
+    aspectColumns = aspectDefinitions
+      .sort((a, b) => a.number - b.number)
+      .map(def => ({ number: def.number, title: def.title }));
+  } else {
+    // Fallback: collect unique aspect titles from results (old behavior)
+    const aspectTitlesSet = new Set<string>();
+    for (const { parsed } of parsedResults) {
+      for (const aspect of parsed.aspects) {
+        if (aspect.aspectTitle) {
+          aspectTitlesSet.add(aspect.aspectTitle);
+        }
+      }
+    }
+    aspectColumns = Array.from(aspectTitlesSet)
+      .sort()
+      .map((title, i) => ({ number: i + 1, title }));
+  }
+
+  // Build rows with fixed columns (filtered content)
   const rows: any[] = [];
 
   for (const { fileName, parsed, error } of parsedResults) {
@@ -277,22 +325,20 @@ export function exportFilteredToExcel(results: AnalysisResult[]): void {
     } else if (!parsed.hasAspects || parsed.aspects.length === 0) {
       row['Note'] = 'No aspects found';
     } else {
-      // Create a map of aspect titles to their filtered content for this file
-      const aspectMap = new Map<string, string>();
+      // Create a map of aspect NUMBER to filtered content for this file
+      const aspectByNumber = new Map<number, string>();
 
       for (const aspect of parsed.aspects) {
-        const title = aspect.aspectTitle || '';
-
         // Only include subsection (a), filtered before dash
-        if (title && aspect.subsectionA) {
+        if (aspect.subsectionA) {
           const filtered = filterBeforeDash(aspect.subsectionA);
-          aspectMap.set(title, filtered);
+          aspectByNumber.set(aspect.aspectNumber, filtered);
         }
       }
 
-      // Add columns for each standardized aspect title
-      for (const aspectTitle of aspectTitles) {
-        row[aspectTitle] = aspectMap.get(aspectTitle) || '';
+      // Add columns using the fixed aspect titles, matched by number
+      for (const col of aspectColumns) {
+        row[col.title] = aspectByNumber.get(col.number) || '';
       }
     }
 
@@ -302,9 +348,9 @@ export function exportFilteredToExcel(results: AnalysisResult[]): void {
   // Create worksheet
   const worksheet = XLSX.utils.json_to_sheet(rows);
 
-  // Set column widths (FileName + dynamic aspect columns)
+  // Set column widths (FileName + aspect columns)
   const colWidths = [{ wch: 30 }]; // File Name column
-  for (let i = 0; i < aspectTitles.length; i++) {
+  for (let i = 0; i < aspectColumns.length; i++) {
     colWidths.push({ wch: 50 }); // Narrower columns since content is shorter
   }
   worksheet['!cols'] = colWidths;

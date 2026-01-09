@@ -158,3 +158,91 @@ export function getAspectSummary(parsed: ParsedAnalysis): string {
 
   return `Found ${parsed.aspects.length} aspect${parsed.aspects.length !== 1 ? 's' : ''}`;
 }
+
+/**
+ * Parsed aspect definition from the prompt
+ */
+export interface AspectDefinition {
+  number: number;
+  title: string;
+  description: string;
+}
+
+/**
+ * Parse rated aspects from the prompt text to extract column headers
+ * Expected format:
+ * (1) Title of aspect
+ * Description text...
+ *
+ * (2) Another aspect
+ * Description...
+ */
+export function parseRatedAspects(ratedAspectsText: string): AspectDefinition[] {
+  if (!ratedAspectsText || typeof ratedAspectsText !== 'string') {
+    return [];
+  }
+
+  const aspects: AspectDefinition[] = [];
+
+  // Match pattern: (N) followed by the title on the same line
+  // The description follows on subsequent lines until the next (N) or end
+  const aspectPattern = /\((\d+)\)\s+([^\n]+)/g;
+
+  let match;
+  const matches: { number: number; title: string; startIndex: number }[] = [];
+
+  while ((match = aspectPattern.exec(ratedAspectsText)) !== null) {
+    matches.push({
+      number: parseInt(match[1], 10),
+      title: match[2].trim(),
+      startIndex: match.index + match[0].length,
+    });
+  }
+
+  // Extract descriptions (text between aspect headers)
+  for (let i = 0; i < matches.length; i++) {
+    const current = matches[i];
+    const nextStartIndex = i < matches.length - 1
+      ? ratedAspectsText.indexOf(`(${matches[i + 1].number})`, current.startIndex)
+      : ratedAspectsText.length;
+
+    const description = ratedAspectsText
+      .substring(current.startIndex, nextStartIndex)
+      .trim();
+
+    aspects.push({
+      number: current.number,
+      title: current.title,
+      description,
+    });
+  }
+
+  return aspects;
+}
+
+/**
+ * Get aspect titles as a map from aspect number to title
+ * Used for consistent column naming in exports
+ */
+export function getAspectTitlesMap(ratedAspectsText: string): Map<number, string> {
+  const aspects = parseRatedAspects(ratedAspectsText);
+  const map = new Map<number, string>();
+
+  for (const aspect of aspects) {
+    map.set(aspect.number, aspect.title);
+  }
+
+  return map;
+}
+
+/**
+ * Get ordered aspect titles from the prompt
+ * Returns titles in the order they appear (by aspect number)
+ */
+export function getOrderedAspectTitles(ratedAspectsText: string): string[] {
+  const aspects = parseRatedAspects(ratedAspectsText);
+  // Sort by number and return just the titles
+  return aspects
+    .sort((a, b) => a.number - b.number)
+    .map(a => a.title);
+}

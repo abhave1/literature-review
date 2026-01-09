@@ -445,6 +445,7 @@ export default function Home() {
               totalFiles={results.totalFiles}
               successCount={results.successCount}
               failureCount={results.failureCount}
+              ratedAspects={ratedAspects}
             />
           </div>
         )}

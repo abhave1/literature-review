@@ -20,6 +20,7 @@ interface AnalysisResultsProps {
   totalFiles: number;
   successCount: number;
   failureCount: number;
+  ratedAspects?: string;
 }
 
 export default function AnalysisResults({
@@ -27,6 +28,7 @@ export default function AnalysisResults({
   totalFiles,
   successCount,
   failureCount,
+  ratedAspects,
 }: AnalysisResultsProps) {
   const [openIndexes, setOpenIndexes] = useState<Set<number>>(new Set());
 
@@ -54,15 +56,15 @@ export default function AnalysisResults({
   };
 
   const handleExportExcel = () => {
-    exportToExcel(results);
+    exportToExcel(results, ratedAspects);
   };
 
   const handleExportFilteredExcel = () => {
-    exportFilteredToExcel(results);
+    exportFilteredToExcel(results, ratedAspects);
   };
 
   const handleExportCSV = () => {
-    exportToCSV(results);
+    exportToCSV(results, ratedAspects);
   };
 
   const stats = getExportStats(results);
