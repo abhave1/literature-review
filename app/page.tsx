@@ -41,6 +41,8 @@ export default function Home() {
   const [results, setResults] = useState<ApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ratedAspects, setRatedAspects] = useState<string>('');
+  const [currentFileIndex, setCurrentFileIndex] = useState<number>(0);
+  const [totalFilesToProcess, setTotalFilesToProcess] = useState<number>(0);
 
   // Blob storage state
   const [blobFiles, setBlobFiles] = useState<BlobFile[]>([]);
@@ -140,76 +142,150 @@ export default function Home() {
 
     setIsProcessing(true);
     setError(null);
-    setResults(null);
-    setProcessingStatus('Initializing PDF parser...');
+    setProcessingStatus('Initializing...');
+    setCurrentFileIndex(0);
+
+    // Initialize results immediately so we can show progress
+    const blobFilesToProcess = hasBlobFiles
+      ? blobFiles.filter(f => selectedBlobFiles.has(f.url))
+      : [];
+    const totalFiles = files.length + blobFilesToProcess.length;
+    setTotalFilesToProcess(totalFiles);
+
+    setResults({
+      success: true,
+      totalFiles,
+      successCount: 0,
+      failureCount: 0,
+      results: [],
+    });
 
     try {
-      // Dynamically import the PDF parser only when needed (browser-only)
-      const { extractTextFromPDFs } = await import('@/lib/client-pdf-parser');
+      // Dynamically import the PDF parser
+      const { extractTextFromPDF } = await import('@/lib/client-pdf-parser');
 
-      let filesToProcess: File[] = [...files];
+      // Build list of items to process
+      type QueueItem = { type: 'local'; file: File } | { type: 'blob'; blobFile: BlobFile };
+      const queue: QueueItem[] = [
+        ...files.map(f => ({ type: 'local' as const, file: f })),
+        ...blobFilesToProcess.map(b => ({ type: 'blob' as const, blobFile: b })),
+      ];
 
-      // If blob files are selected, fetch them first
-      if (hasBlobFiles) {
-        setProcessingStatus('Loading PDFs from storage...');
-        const blobFilesToProcess = blobFiles.filter(f => selectedBlobFiles.has(f.url));
+      let successCount = 0;
+      let failureCount = 0;
 
-        for (const blobFile of blobFilesToProcess) {
-          try {
-            const res = await fetch(blobFile.url);
+      // Process one file at a time, updating results as we go
+      for (let i = 0; i < queue.length; i++) {
+        const item = queue[i];
+        const fileName = item.type === 'blob' ? item.blobFile.name : item.file.name;
+        setCurrentFileIndex(i);
+
+        try {
+          // Step 1: Load the file
+          setProcessingStatus(`Loading ${fileName}...`);
+          let file: File;
+          if (item.type === 'blob') {
+            const res = await fetch(item.blobFile.url);
             const blob = await res.blob();
-            const file = new File([blob], blobFile.name, { type: 'application/pdf' });
-            filesToProcess.push(file);
-          } catch (err) {
-            console.error(`Failed to fetch ${blobFile.name}:`, err);
+            file = new File([blob], item.blobFile.name, { type: 'application/pdf' });
+          } else {
+            file = item.file;
           }
+
+          // Step 2: Parse the PDF
+          setProcessingStatus(`Parsing ${fileName}...`);
+          const parseResult = await extractTextFromPDF(file);
+
+          // Step 3: Send to API for analysis
+          setProcessingStatus(`Analyzing ${fileName}...`);
+          const analysisResult = await analyzeSingleFile({
+            fileName: file.name,
+            text: parseResult.text,
+            metadata: parseResult.metadata,
+          }, ratedAspects);
+
+          // Update results immediately
+          if (analysisResult.success) {
+            successCount++;
+          } else {
+            failureCount++;
+          }
+
+          setResults(prev => prev ? {
+            ...prev,
+            successCount,
+            failureCount,
+            results: [...prev.results, analysisResult],
+          } : null);
+
+        } catch (err) {
+          console.error(`Failed to process ${fileName}:`, err);
+          failureCount++;
+
+          // Add failed result
+          setResults(prev => prev ? {
+            ...prev,
+            failureCount,
+            results: [...prev.results, {
+              fileName,
+              success: false,
+              error: String(err),
+            }],
+          } : null);
         }
       }
 
-      // Step 1: Extract text from PDFs in the browser
-      setProcessingStatus('Extracting text from PDFs...');
-      const extractions = await extractTextFromPDFs(filesToProcess, (fileName, current, total) => {
-        setProcessingStatus(`Extracting text from ${fileName} (${current}/${total})...`);
-      });
-
-      // Check if any extractions failed
-      const failedExtractions = extractions.filter((e) => !e.success);
-      if (failedExtractions.length > 0) {
-        console.warn('Some PDFs failed to extract:', failedExtractions);
-      }
-
-      // Step 2: Send extracted text to backend for analysis
-      setProcessingStatus('Sending to AI for analysis...');
-      const response = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          files: extractions.map((extraction) => ({
-            fileName: extraction.fileName,
-            text: extraction.text || '',
-            metadata: extraction.metadata,
-            extractionSuccess: extraction.success,
-            extractionError: extraction.error,
-          })),
-          ratedAspects: ratedAspects.trim() || undefined,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Analysis failed');
-      }
-
-      const data: ApiResponse = await response.json();
-      setResults(data);
       setProcessingStatus('');
+      setCurrentFileIndex(totalFiles);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       setProcessingStatus('');
     } finally {
       setIsProcessing(false);
+      setTotalFilesToProcess(0);
+      setCurrentFileIndex(0);
+    }
+  };
+
+  // Helper function to analyze a single file
+  const analyzeSingleFile = async (
+    file: { fileName: string; text: string; metadata: any },
+    aspects?: string
+  ): Promise<AnalysisResult> => {
+    try {
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          files: [{
+            fileName: file.fileName,
+            text: file.text,
+            metadata: file.metadata,
+            extractionSuccess: true,
+          }],
+          ratedAspects: aspects?.trim() || undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        const contentType = response.headers.get('content-type');
+        if (contentType?.includes('application/json')) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Analysis failed');
+        } else {
+          const errorText = await response.text();
+          throw new Error(`API error ${response.status}: ${errorText.substring(0, 100)}`);
+        }
+      }
+
+      const data = await response.json();
+      return data.results?.[0] || { fileName: file.fileName, success: false, error: 'No result returned' };
+    } catch (err) {
+      return {
+        fileName: file.fileName,
+        success: false,
+        error: String(err),
+      };
     }
   };
 
@@ -366,24 +442,44 @@ export default function Home() {
         <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
           <FileUpload onFilesSelected={handleFilesSelected} isProcessing={isProcessing} />
 
-          {(files.length > 0 || selectedBlobFiles.size > 0) && (
+          {(files.length > 0 || selectedBlobFiles.size > 0) && !isProcessing && (
             <div className="mt-6 flex flex-col items-center gap-4">
               <button
                 onClick={handleAnalyze}
-                disabled={isProcessing}
-                className={`
-                  px-8 py-3 rounded-lg font-semibold text-white transition-all
-                  ${
-                    isProcessing
-                      ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-blue-600 hover:bg-blue-700 hover:shadow-lg'
-                  }
-                `}
+                className="px-8 py-3 rounded-lg font-semibold text-white transition-all bg-blue-600 hover:bg-blue-700 hover:shadow-lg"
               >
-                {isProcessing ? (
-                  <span className="flex items-center gap-2">
+                Analyze {files.length + selectedBlobFiles.size} File{(files.length + selectedBlobFiles.size) !== 1 ? 's' : ''}
+              </button>
+            </div>
+          )}
+
+          {/* Processing Progress Indicator */}
+          {isProcessing && totalFilesToProcess > 0 && (
+            <div className="mt-6 w-full max-w-2xl mx-auto">
+              {/* Progress Header */}
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700">
+                  Processing files...
+                </span>
+                <span className="text-sm font-medium text-blue-600">
+                  {results?.results.length || 0} / {totalFilesToProcess} complete
+                </span>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="w-full bg-gray-200 rounded-full h-3 mb-4 overflow-hidden">
+                <div
+                  className="bg-blue-600 h-3 rounded-full transition-all duration-500 ease-out"
+                  style={{ width: `${((results?.results.length || 0) / totalFilesToProcess) * 100}%` }}
+                />
+              </div>
+
+              {/* Current File Status */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0">
                     <svg
-                      className="animate-spin h-5 w-5"
+                      className="animate-spin h-5 w-5 text-blue-600"
                       fill="none"
                       viewBox="0 0 24 24"
                     >
@@ -401,15 +497,48 @@ export default function Home() {
                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                       />
                     </svg>
-                    Processing...
-                  </span>
-                ) : (
-                  `Analyze ${files.length + selectedBlobFiles.size} File${(files.length + selectedBlobFiles.size) !== 1 ? 's' : ''}`
-                )}
-              </button>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-blue-900">
+                      File {currentFileIndex + 1} of {totalFilesToProcess}
+                    </p>
+                    <p className="text-sm text-blue-700 truncate">
+                      {processingStatus || 'Processing...'}
+                    </p>
+                  </div>
+                </div>
+              </div>
 
-              {processingStatus && (
-                <p className="text-sm text-gray-600 animate-pulse">{processingStatus}</p>
+              {/* Completed Files Summary */}
+              {results && results.results.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Completed
+                  </p>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {results.results.map((result, idx) => (
+                      <div
+                        key={idx}
+                        className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded ${
+                          result.success
+                            ? 'bg-green-50 text-green-800'
+                            : 'bg-red-50 text-red-800'
+                        }`}
+                      >
+                        {result.success ? (
+                          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        )}
+                        <span className="truncate">{result.fileName}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           )}
