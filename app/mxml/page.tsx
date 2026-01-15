@@ -100,6 +100,8 @@ export default function MxMLPage() {
   const [processingStatus, setProcessingStatus] = useState<string>('');
   const [results, setResults] = useState<AnalysisResult[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [currentFileIndex, setCurrentFileIndex] = useState<number>(0);
+  const [totalFilesToProcess, setTotalFilesToProcess] = useState<number>(0);
 
   // Prompt Inputs
   const [ratedAspects, setRatedAspects] = useState<string>(DEFAULT_ASPECTS);
@@ -423,6 +425,49 @@ export default function MxMLPage() {
     }
   };
 
+  // Helper function to analyze a single file
+  const analyzeSingleFile = async (
+    file: { fileName: string; text: string; metadata: any },
+    aspects?: string
+  ): Promise<AnalysisResult> => {
+    try {
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          files: [{
+            fileName: file.fileName,
+            text: file.text,
+            metadata: file.metadata,
+            extractionSuccess: true,
+          }],
+          ratedAspects: aspects?.trim() || undefined,
+          useMxmlPrompt: true,
+        }),
+      });
+
+      if (!response.ok) {
+        const contentType = response.headers.get('content-type');
+        if (contentType?.includes('application/json')) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Analysis failed');
+        } else {
+          const errorText = await response.text();
+          throw new Error(`API error ${response.status}: ${errorText.substring(0, 100)}`);
+        }
+      }
+
+      const data = await response.json();
+      return data.results?.[0] || { fileName: file.fileName, success: false, error: 'No result returned' };
+    } catch (err) {
+      return {
+        fileName: file.fileName,
+        success: false,
+        error: String(err),
+      };
+    }
+  };
+
   const handleAnalyze = async () => {
     if (selectedFiles.size === 0) {
       setError('Please select at least one file.');
@@ -432,69 +477,79 @@ export default function MxMLPage() {
     setIsProcessing(true);
     setError(null);
     setResults([]);
-    setProcessingStatus('Starting analysis...');
+    setProcessingStatus('Initializing...');
+    setCurrentFileIndex(0);
+
+    const filesToProcess = files.filter(f => selectedFiles.has(f.url));
+    const totalFiles = filesToProcess.length;
+    setTotalFilesToProcess(totalFiles);
 
     try {
-      const filesToProcess = files.filter(f => selectedFiles.has(f.url));
-
       // Import client-side parser
-      const { extractTextFromPDFs } = await import('@/lib/client-pdf-parser');
+      const { extractTextFromPDF } = await import('@/lib/client-pdf-parser');
 
-      // Step 1: Convert blob URLs to File objects
-      setProcessingStatus('Loading PDFs from storage...');
-      const pdfFiles: File[] = [];
-      for (const file of filesToProcess) {
+      let successCount = 0;
+      let failureCount = 0;
+
+      // Process one file at a time, updating results as we go
+      for (let i = 0; i < filesToProcess.length; i++) {
+        const blobFile = filesToProcess[i];
+        setCurrentFileIndex(i);
+
         try {
-          const blobRes = await fetch(file.url);
+          // Step 1: Load the file
+          setProcessingStatus(`Loading ${blobFile.name}...`);
+          const blobRes = await fetch(blobFile.url);
           if (!blobRes.ok) {
             throw new Error(`Failed to fetch: ${blobRes.status}`);
           }
           const blobData = await blobRes.blob();
-          const pdfFile = new File([blobData], file.name, { type: 'application/pdf' });
-          pdfFiles.push(pdfFile);
+          const pdfFile = new File([blobData], blobFile.name, { type: 'application/pdf' });
+
+          // Step 2: Parse the PDF
+          setProcessingStatus(`Parsing ${blobFile.name}...`);
+          const parseResult = await extractTextFromPDF(pdfFile);
+
+          // Step 3: Send to API for analysis
+          setProcessingStatus(`Analyzing ${blobFile.name}...`);
+          const analysisResult = await analyzeSingleFile({
+            fileName: blobFile.name,
+            text: parseResult.text,
+            metadata: parseResult.metadata,
+          }, ratedAspects);
+
+          // Update results immediately
+          if (analysisResult.success) {
+            successCount++;
+          } else {
+            failureCount++;
+          }
+
+          setResults(prev => [...prev, analysisResult]);
+
         } catch (err) {
-          console.error(`Error loading ${file.name}:`, err);
+          console.error(`Failed to process ${blobFile.name}:`, err);
+          failureCount++;
+
+          // Add failed result
+          setResults(prev => [...prev, {
+            fileName: blobFile.name,
+            success: false,
+            error: String(err),
+          }]);
         }
       }
 
-      // Step 2: Extract text from ALL files using the same method as the original page
-      setProcessingStatus('Extracting text from PDFs...');
-      const extractions = await extractTextFromPDFs(pdfFiles, (fileName, current, total) => {
-        setProcessingStatus(`Extracting text from ${fileName} (${current}/${total})...`);
-      });
-
-      // Step 3: Send ALL files in ONE batch to API (processes in parallel)
-      setProcessingStatus('Sending to AI for analysis...');
-      const apiRes = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          files: extractions.map((extraction) => ({
-            fileName: extraction.fileName,
-            text: extraction.text || '',
-            metadata: extraction.metadata,
-            extractionSuccess: extraction.success,
-            extractionError: extraction.error,
-          })),
-          ratedAspects: ratedAspects.trim() || undefined,
-          useMxmlPrompt: true
-        })
-      });
-
-      if (!apiRes.ok) {
-        const errorData = await apiRes.json();
-        throw new Error(errorData.error || 'Analysis failed');
-      }
-
-      const apiData = await apiRes.json();
-      setResults(apiData.results || []);
-      setProcessingStatus('Analysis Complete.');
+      setProcessingStatus('');
+      setCurrentFileIndex(totalFiles);
 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       setProcessingStatus('');
     } finally {
       setIsProcessing(false);
+      setTotalFilesToProcess(0);
+      setCurrentFileIndex(0);
     }
   };
 
@@ -824,12 +879,96 @@ export default function MxMLPage() {
             )}
           </button>
           
-          {processingStatus && (
-            <div className="bg-blue-50 text-blue-700 px-4 py-2 rounded-full text-sm font-medium animate-pulse border border-blue-100">
-              {processingStatus}
+          {/* Processing Progress Indicator */}
+          {isProcessing && totalFilesToProcess > 0 && (
+            <div className="w-full max-w-2xl">
+              {/* Progress Header */}
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700">
+                  Processing files...
+                </span>
+                <span className="text-sm font-medium text-blue-600">
+                  {results.length} / {totalFilesToProcess} complete
+                </span>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="w-full bg-gray-200 rounded-full h-3 mb-4 overflow-hidden">
+                <div
+                  className="bg-blue-600 h-3 rounded-full transition-all duration-500 ease-out"
+                  style={{ width: `${(results.length / totalFilesToProcess) * 100}%` }}
+                />
+              </div>
+
+              {/* Current File Status */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0">
+                    <svg
+                      className="animate-spin h-5 w-5 text-blue-600"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-blue-900">
+                      File {currentFileIndex + 1} of {totalFilesToProcess}
+                    </p>
+                    <p className="text-sm text-blue-700 truncate">
+                      {processingStatus || 'Processing...'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Completed Files Summary */}
+              {results.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    Completed
+                  </p>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {results.map((result, idx) => (
+                      <div
+                        key={idx}
+                        className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded ${
+                          result.success
+                            ? 'bg-green-50 text-green-800'
+                            : 'bg-red-50 text-red-800'
+                        }`}
+                      >
+                        {result.success ? (
+                          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        )}
+                        <span className="truncate">{result.fileName}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
-          
+
           {error && (
             <div className="bg-red-50 text-red-700 px-6 py-4 rounded-lg border border-red-200 flex items-center gap-3">
               <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
