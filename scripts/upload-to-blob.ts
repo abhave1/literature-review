@@ -9,7 +9,7 @@ dotenv.config({ path: '.env.local' });
 // Configuration
 const MAX_CONCURRENT = 20; // Number of parallel uploads
 const DEFAULT_BLOB_FOLDER = 'icap-papers'; // Default destination folder
-const ALLOWED_YEARS = [2024, 2025, 2026];
+const ALLOWED_YEARS = [2024, 2025, 2026]; // 
 
 function extractYear(filename: string): number | null {
   // Pattern 0: 3-digit year at start (e.g., "025_paper.pdf" -> 2025)
@@ -46,25 +46,28 @@ function extractYear(filename: string): number | null {
 }
 
 async function uploadToBlob() {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  const useMxml = process.argv.includes('--mxml');
+  const tokenEnvVar = useMxml ? 'BLOB_READ_WRITE_TOKEN_MXML' : 'BLOB_READ_WRITE_TOKEN';
+  const token = process.env[tokenEnvVar];
   if (!token) {
-    console.error('Error: BLOB_READ_WRITE_TOKEN is not set in .env.local');
+    console.error(`Error: ${tokenEnvVar} is not set in .env.local`);
     process.exit(1);
   }
 
   const LOCAL_FOLDER_PATH = process.argv[2];
-  const BLOB_FOLDER = (process.argv[3] || DEFAULT_BLOB_FOLDER).replace(/\/$/, ''); // Remove trailing slash
+  const BLOB_FOLDER = (process.argv[3] || (useMxml ? 'mxml-pdfs' : DEFAULT_BLOB_FOLDER)).replace(/\/$/, ''); // Remove trailing slash
   const concurrency = parseInt(process.argv[4]) || MAX_CONCURRENT;
   const noFilter = process.argv.includes('--no-filter');
 
   if (!LOCAL_FOLDER_PATH) {
-    console.error('Usage: npx tsx scripts/upload-to-blob.ts <local-folder> [blob-folder] [concurrency] [--no-filter]');
+    console.error('Usage: npx tsx scripts/upload-to-blob.ts <local-folder> [blob-folder] [concurrency] [--no-filter] [--mxml]');
     console.error('');
     console.error('Arguments:');
     console.error('  <local-folder>   Path to folder containing PDFs');
-    console.error('  [blob-folder]    Destination folder in blob storage (default: icap-papers)');
+    console.error('  [blob-folder]    Destination folder in blob storage (default: icap-papers, or mxml-pdfs with --mxml)');
     console.error('  [concurrency]    Number of parallel uploads (default: 20)');
     console.error('  --no-filter      Skip year filtering (upload all PDFs)');
+    console.error('  --mxml           Use MXML blob storage token (BLOB_READ_WRITE_TOKEN_MXML)');
     console.error('');
     console.error(`By default, only uploads files from years: ${ALLOWED_YEARS.join(', ')}`);
     console.error('');
@@ -73,6 +76,7 @@ async function uploadToBlob() {
     console.error('  npx tsx scripts/upload-to-blob.ts ~/Downloads/pdfs icap-papers');
     console.error('  npx tsx scripts/upload-to-blob.ts ~/Downloads/pdfs icap-papers 10');
     console.error('  npx tsx scripts/upload-to-blob.ts ~/Downloads/pdfs icap-papers 20 --no-filter');
+    console.error('  npx tsx scripts/upload-to-blob.ts ~/Downloads/pdfs --mxml --no-filter');
     process.exit(1);
   }
 
@@ -106,6 +110,7 @@ async function uploadToBlob() {
   console.log('=====================');
   console.log(`  Source: ${LOCAL_FOLDER_PATH}`);
   console.log(`  Destination: ${BLOB_FOLDER}/`);
+  console.log(`  Blob store: ${useMxml ? 'MXML' : 'Default (ICAP)'}`);
   console.log(`  Concurrency: ${concurrency}`);
   console.log(`  Year filter: ${noFilter ? 'DISABLED' : ALLOWED_YEARS.join(', ')}`);
   console.log('');

@@ -3,10 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'edge';
 
-// Allowed folder prefixes
-const FOLDERS: Record<string, string> = {
-  'mxml': 'mxml-pdfs/',
-  'icap': 'icap-papers/',
+// Allowed folder prefixes and their tokens
+const FOLDERS: Record<string, { prefix: string; tokenEnv: string }> = {
+  'mxml': { prefix: 'mxml-pdfs/', tokenEnv: 'BLOB_READ_WRITE_TOKEN_MXML' },
+  'icap': { prefix: 'icap-papers/', tokenEnv: 'BLOB_READ_WRITE_TOKEN' },
 };
 
 export async function GET(request: NextRequest) {
@@ -14,7 +14,16 @@ export async function GET(request: NextRequest) {
     // Get folder from query param, default to 'mxml'
     const searchParams = request.nextUrl.searchParams;
     const folderKey = searchParams.get('folder') || 'mxml';
-    const prefix = FOLDERS[folderKey] || FOLDERS['mxml'];
+    const folderConfig = FOLDERS[folderKey] || FOLDERS['mxml'];
+    const prefix = folderConfig.prefix;
+    const token = process.env[folderConfig.tokenEnv];
+
+    if (!token) {
+      return NextResponse.json(
+        { error: `Token not configured for ${folderKey}` },
+        { status: 500 }
+      );
+    }
 
     // Fetch ALL files using pagination
     const allBlobs: any[] = [];
@@ -25,7 +34,7 @@ export async function GET(request: NextRequest) {
         prefix,
         limit: 1000, // Max per request
         cursor,
-        token: process.env.BLOB_READ_WRITE_TOKEN,
+        token,
       });
 
       allBlobs.push(...response.blobs);
