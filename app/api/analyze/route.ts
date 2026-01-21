@@ -145,7 +145,7 @@ Follow the same format for each and EVERY rated aspect.
 
 DO NOT FORGET OR EXCLUDE ANY OF THE PROVIDED RATED ASPECTS.
 
-IMPORTANT: You MUST address EVERY SINGLE rated aspect listed above, even if the answer is "Not applicable" or "Not addressed in the paper". Do not skip any aspect numbers. Go through each aspect systematically (from 1 to however many are listed).
+IMPORTANT: You MUST address EVERY SINGLE rated aspect listed above. Do not skip any aspect numbers. Go through each aspect systematically (from 1 to however many are listed). Answer each aspect with either Yes or No only.
 
 After all your reasoning, add your compiled response in this format in markdown, with consistent spacing, no icons or emojis. If you don't have enough information to answer a question, don't guess, but rather pose that as a question and don't answer it or make a probabilistic guess. DO NOT include spacers between your aspects, include every single necessary markdown character (eg. new line, tabs, dashes etc.) to preserve formatting. DO NOT include [cite: start] tags or any file citation tags.
 
@@ -153,7 +153,7 @@ The format of your response should be:
 
 ## [Title of the paper being reviewed]
 ### Aspect (1) - [Rated question]
-(a) [Yes, No, or Maybe where applicable, or the actual conclusion that matches with the question asked] - [Conclusion made for the rated aspect from the provided text]
+(a) [Yes or No] - [Conclusion made for the rated aspect from the provided text]
 (b) [Explanation that provides a step-by-step rationale and reasoning chain from you, the LLM, as to why you decided to make this conclusion]
 (c) [Evidence that you used for your chain of thought reasoning. Cite the location of the evidence by page number or section heading. Quote relevant text when possible. DO NOT use filecite tags or any link to the file. Only cite by writing plain text.]
 
@@ -163,19 +163,19 @@ CRITICAL: Use "Aspect (1)" with parentheses around the number, NOT "Aspect [1]" 
 
 Example of a good formatted response:
 
-### Aspect (1) - Does the paper report on automated scoring methods?
-(a) Yes - the paper reports implementations of automated scoring using machine learning methods for text items.
+### Aspect (1) - Does this paper study machine learning methods in the context of automatic text or speech scoring?
+(a) Yes - The paper studies neural network methods for automated essay scoring.
 
-(b) The abstract and introduction state that the study explores machine learning approaches for automated essay scoring. The methods section describes the ML algorithms implemented and evaluated. The results section provides detailed performance metrics of the automated scoring system.
+(b) The abstract states the paper develops and evaluates machine learning approaches for automatically scoring written essays. The methods section details the implementation of deep learning architectures trained on human-scored essay data. The results demonstrate the system's ability to assign scores comparable to human raters.
 
-(c) "This study explores machine learning methods for automated essay scoring... Using neural network architectures, the research presents various scoring models..." "The system achieved a correlation of 0.82 with human raters." Located in the Abstract and Results sections.
+(c) "This study develops machine learning methods for automated essay scoring, training neural networks on a corpus of human-scored essays..." "The system achieved agreement rates of 0.85 with human raters." Located in the Abstract and Methods sections.
 
-### Aspect (2) - Does the paper address construct validation?
-(a) No - the paper's main purpose is to develop a scoring algorithm, not to provide construct validity evidence.
+### Aspect (16) - Is the main focus of this paper a CONCEPTUAL discussion of the applications of machine learning methods in measurement practice?
+(a) No - The paper's main focus is empirical evaluation of a scoring system, not a conceptual discussion.
 
-(b) While the paper mentions the construct being measured, it does not focus on validating whether the automated scores reflect the intended construct. The emphasis is on predictive accuracy rather than construct validity.
+(b) While the introduction provides some background on ML in measurement, the primary contribution is the development and empirical testing of an automated scoring algorithm. The paper presents experimental results rather than serving as a review or conceptual discussion piece.
 
-(c) Evidence: "This study aimed at testing the accuracy of the automated scoring model in terms of agreement with human raters." The paper focuses on inter-rater reliability rather than construct validation.`;
+(c) "The primary contribution of this study is the development and evaluation of an automated scoring system..." "Our experiments demonstrate..." The paper structure emphasizes methodology and results over conceptual discussion.`;
 
         prompt = `Here is the extracted text to analyze:\n\n${text}`;
     } else {
