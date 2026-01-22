@@ -5,7 +5,7 @@ export const runtime = 'edge';
 
 // Allowed folder prefixes and their tokens
 const FOLDERS: Record<string, { prefix: string; tokenEnv: string }> = {
-  'mxml': { prefix: 'mxml-pdfs/', tokenEnv: 'BLOB_READ_WRITE_TOKEN_MXML' },
+  'mxml': { prefix: 'mxml-pdfs/', tokenEnv: 'BLOB_MXML_READ_WRITE_TOKEN' },
   'icap': { prefix: 'icap-papers/', tokenEnv: 'BLOB_READ_WRITE_TOKEN' },
 };
 

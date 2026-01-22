@@ -47,7 +47,7 @@ function extractYear(filename: string): number | null {
 
 async function uploadToBlob() {
   const useMxml = process.argv.includes('--mxml');
-  const tokenEnvVar = useMxml ? 'BLOB_READ_WRITE_TOKEN_MXML' : 'BLOB_READ_WRITE_TOKEN';
+  const tokenEnvVar = useMxml ? 'BLOB_MXML_READ_WRITE_TOKEN' : 'BLOB_READ_WRITE_TOKEN';
   const token = process.env[tokenEnvVar];
   if (!token) {
     console.error(`Error: ${tokenEnvVar} is not set in .env.local`);
@@ -67,7 +67,7 @@ async function uploadToBlob() {
     console.error('  [blob-folder]    Destination folder in blob storage (default: icap-papers, or mxml-pdfs with --mxml)');
     console.error('  [concurrency]    Number of parallel uploads (default: 20)');
     console.error('  --no-filter      Skip year filtering (upload all PDFs)');
-    console.error('  --mxml           Use MXML blob storage token (BLOB_READ_WRITE_TOKEN_MXML)');
+    console.error('  --mxml           Use MXML blob storage token (BLOB_MXML_READ_WRITE_TOKEN)');
     console.error('');
     console.error(`By default, only uploads files from years: ${ALLOWED_YEARS.join(', ')}`);
     console.error('');
