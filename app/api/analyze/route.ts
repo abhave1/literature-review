@@ -48,16 +48,11 @@ export async function POST(request: NextRequest) {
       console.log(`Using rated aspects: ${ratedAspects.substring(0, 100)}...`);
     }
 
-    // Process files sequentially to avoid overwhelming the API
-    const MAX_CONCURRENT = 1;
+    // Process files sequentially
     const results: AnalysisResult[] = [];
-
-    for (let i = 0; i < files.length; i += MAX_CONCURRENT) {
-      const batch = files.slice(i, i + MAX_CONCURRENT);
-      const batchResults = await Promise.all(
-        batch.map((file) => analyzeText(file, ratedAspects, useMxmlPrompt))
-      );
-      results.push(...batchResults);
+    for (const file of files) {
+      const result = await analyzeText(file, ratedAspects, useMxmlPrompt);
+      results.push(result);
     }
 
     // Return results

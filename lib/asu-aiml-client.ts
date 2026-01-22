@@ -114,7 +114,9 @@ export class AsuAimlClient {
     });
 
     if (!response.ok) {
-      throw new Error(`Query request failed: ${response.status} ${response.statusText}`);
+      const errorBody = await response.text();
+      console.error('ASU AIML API error body:', errorBody);
+      throw new Error(`Query request failed: ${response.status} ${response.statusText} - ${errorBody}`);
     }
 
     return response.json();
