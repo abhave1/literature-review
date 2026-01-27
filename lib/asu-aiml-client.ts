@@ -15,6 +15,67 @@ interface AsuAimlConfig {
   baseUrl?: string;
   /** Base URL for WebSocket API (default: wss://apiws-main-beta.aiml.asu.edu) */
   wsBaseUrl?: string;
+  /** Request timeout in milliseconds (default: 300000 = 5 minutes) */
+  timeout?: number;
+  /** Maximum retry attempts for transient errors (default: 3) */
+  maxRetries?: number;
+}
+
+/**
+ * Retry configuration
+ */
+interface RetryConfig {
+  maxAttempts: number;
+  baseDelay: number;
+  maxDelay: number;
+}
+
+const DEFAULT_TIMEOUT = 300000; // 5 minutes
+const DEFAULT_RETRY_CONFIG: RetryConfig = {
+  maxAttempts: 3,
+  baseDelay: 2000,  // 2 seconds
+  maxDelay: 30000,  // 30 seconds
+};
+
+/**
+ * Check if an error is retryable (transient)
+ */
+function isRetryableError(error: any): boolean {
+  // Network errors
+  if (error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET' || error.code === 'ECONNREFUSED') {
+    return true;
+  }
+  // Fetch abort/timeout
+  if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+    return true;
+  }
+  // Check cause for nested errors
+  if (error.cause) {
+    if (error.cause.code === 'ETIMEDOUT' || error.cause.code === 'ECONNRESET') {
+      return true;
+    }
+  }
+  // HTTP 429 (rate limit) or 5xx errors
+  if (error.status === 429 || (error.status >= 500 && error.status < 600)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Calculate exponential backoff delay with jitter
+ */
+function calculateBackoff(attempt: number, config: RetryConfig): number {
+  const exponentialDelay = config.baseDelay * Math.pow(2, attempt);
+  const jitter = Math.random() * 0.3 * exponentialDelay;
+  return Math.min(exponentialDelay + jitter, config.maxDelay);
+}
+
+/**
+ * Sleep utility
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**
@@ -25,6 +86,8 @@ export class AsuAimlClient {
   private projectToken?: string;
   private baseUrl: string;
   private wsBaseUrl: string;
+  private timeout: number;
+  private retryConfig: RetryConfig;
 
   /**
    * Creates a new ASU AIML API client
@@ -36,6 +99,11 @@ export class AsuAimlClient {
       this.projectToken = config.projectToken;
       this.baseUrl = config.baseUrl || 'https://api-main-beta.aiml.asu.edu';
       this.wsBaseUrl = config.wsBaseUrl || 'wss://apiws-main-beta.aiml.asu.edu';
+      this.timeout = config.timeout || DEFAULT_TIMEOUT;
+      this.retryConfig = {
+        ...DEFAULT_RETRY_CONFIG,
+        maxAttempts: config.maxRetries || DEFAULT_RETRY_CONFIG.maxAttempts,
+      };
     } else {
       // Load from environment variables
       const token = process.env.ASU_AIML_TOKEN;
@@ -46,7 +114,70 @@ export class AsuAimlClient {
       this.projectToken = process.env.ASU_AIML_PROJECT_TOKEN;
       this.baseUrl = process.env.ASU_AIML_BASE_URL || 'https://api-main-beta.aiml.asu.edu';
       this.wsBaseUrl = process.env.ASU_AIML_WS_BASE_URL || 'wss://apiws-main-beta.aiml.asu.edu';
+      this.timeout = DEFAULT_TIMEOUT;
+      this.retryConfig = DEFAULT_RETRY_CONFIG;
     }
+  }
+
+  /**
+   * Fetch with timeout and automatic retry for transient errors
+   */
+  private async fetchWithRetry(
+    url: string,
+    options: RequestInit,
+    operationName: string
+  ): Promise<Response> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt < this.retryConfig.maxAttempts; attempt++) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+      try {
+        if (attempt > 0) {
+          console.log(`[ASU AIML] Retry attempt ${attempt + 1}/${this.retryConfig.maxAttempts} for ${operationName}`);
+        }
+
+        const response = await fetch(url, {
+          ...options,
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        // Check for retryable HTTP errors
+        if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
+          const error: any = new Error(`HTTP ${response.status}: ${response.statusText}`);
+          error.status = response.status;
+          throw error;
+        }
+
+        return response;
+      } catch (error: any) {
+        clearTimeout(timeoutId);
+        lastError = error;
+
+        // Check if this is an abort due to timeout
+        if (error.name === 'AbortError') {
+          console.warn(`[ASU AIML] Request timeout after ${this.timeout}ms for ${operationName}`);
+          error.code = 'ETIMEDOUT';
+        }
+
+        // Check if error is retryable
+        if (isRetryableError(error) && attempt < this.retryConfig.maxAttempts - 1) {
+          const delay = calculateBackoff(attempt, this.retryConfig);
+          console.warn(`[ASU AIML] ${operationName} failed with ${error.code || error.message}, retrying in ${Math.round(delay)}ms...`);
+          await sleep(delay);
+          continue;
+        }
+
+        // Not retryable or last attempt
+        throw error;
+      }
+    }
+
+    // Should not reach here, but just in case
+    throw lastError || new Error(`${operationName} failed after ${this.retryConfig.maxAttempts} attempts`);
   }
 
   /**
@@ -107,11 +238,15 @@ export class AsuAimlClient {
       delete payload.systemPrompt;
     }
 
-    const response = await fetch(`${this.baseUrl}/query`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify(payload),
-    });
+    const response = await this.fetchWithRetry(
+      `${this.baseUrl}/query`,
+      {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(payload),
+      },
+      'query'
+    );
 
     if (!response.ok) {
       const errorBody = await response.text();

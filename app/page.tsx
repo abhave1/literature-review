@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import FileUpload from '@/components/FileUpload';
 import AnalysisResults from '@/components/AnalysisResults';
 import AccessKeyPrompt from '@/components/AccessKeyPrompt';
+import { useBatchProcessor } from '@/lib/hooks/use-batch-processor';
 
 interface AnalysisResult {
   fileName: string;
@@ -32,23 +33,35 @@ interface BlobFile {
   name: string;
 }
 
+// Type for items in the processing queue
+interface QueueItem {
+  type: 'local' | 'blob';
+  file?: File;
+  blobFile?: BlobFile;
+  fileName: string;
+}
+
 export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [files, setFiles] = useState<File[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<string>('');
   const [results, setResults] = useState<ApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ratedAspects, setRatedAspects] = useState<string>('');
-  const [currentFileIndex, setCurrentFileIndex] = useState<number>(0);
-  const [totalFilesToProcess, setTotalFilesToProcess] = useState<number>(0);
 
   // Blob storage state
   const [blobFiles, setBlobFiles] = useState<BlobFile[]>([]);
   const [isLoadingBlob, setIsLoadingBlob] = useState(false);
   const [selectedBlobFiles, setSelectedBlobFiles] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Batch processor hook for parallel processing (5 concurrent requests)
+  const processor = useBatchProcessor<QueueItem, AnalysisResult>({
+    defaultMode: 'parallel',
+    defaultConcurrency: 5,
+    persistConfig: false,
+  });
 
   // Check if user has a valid key on mount
   useEffect(() => {
@@ -140,18 +153,22 @@ export default function Home() {
       return;
     }
 
-    setIsProcessing(true);
     setError(null);
     setProcessingStatus('Initializing...');
-    setCurrentFileIndex(0);
 
-    // Initialize results immediately so we can show progress
+    // Build list of items to process
     const blobFilesToProcess = hasBlobFiles
       ? blobFiles.filter(f => selectedBlobFiles.has(f.url))
       : [];
-    const totalFiles = files.length + blobFilesToProcess.length;
-    setTotalFilesToProcess(totalFiles);
 
+    const queue: QueueItem[] = [
+      ...files.map(f => ({ type: 'local' as const, file: f, fileName: f.name })),
+      ...blobFilesToProcess.map(b => ({ type: 'blob' as const, blobFile: b, fileName: b.name })),
+    ];
+
+    const totalFiles = queue.length;
+
+    // Initialize results immediately so we can show progress
     setResults({
       success: true,
       totalFiles,
@@ -164,32 +181,22 @@ export default function Home() {
       // Dynamically import the PDF parser
       const { extractTextFromPDF } = await import('@/lib/client-pdf-parser');
 
-      // Build list of items to process
-      type QueueItem = { type: 'local'; file: File } | { type: 'blob'; blobFile: BlobFile };
-      const queue: QueueItem[] = [
-        ...files.map(f => ({ type: 'local' as const, file: f })),
-        ...blobFilesToProcess.map(b => ({ type: 'blob' as const, blobFile: b })),
-      ];
-
-      let successCount = 0;
-      let failureCount = 0;
-
-      // Process one file at a time, updating results as we go
-      for (let i = 0; i < queue.length; i++) {
-        const item = queue[i];
-        const fileName = item.type === 'blob' ? item.blobFile.name : item.file.name;
-        setCurrentFileIndex(i);
+      // Process function for each file
+      const processFile = async (item: QueueItem): Promise<AnalysisResult> => {
+        const fileName = item.fileName;
 
         try {
           // Step 1: Load the file
           setProcessingStatus(`Loading ${fileName}...`);
           let file: File;
-          if (item.type === 'blob') {
+          if (item.type === 'blob' && item.blobFile) {
             const res = await fetch(item.blobFile.url);
             const blob = await res.blob();
             file = new File([blob], item.blobFile.name, { type: 'application/pdf' });
-          } else {
+          } else if (item.file) {
             file = item.file;
+          } else {
+            throw new Error('Invalid queue item');
           }
 
           // Step 2: Parse the PDF
@@ -204,46 +211,46 @@ export default function Home() {
             metadata: parseResult.metadata,
           }, ratedAspects);
 
-          // Update results immediately
-          if (analysisResult.success) {
-            successCount++;
-          } else {
-            failureCount++;
-          }
-
-          setResults(prev => prev ? {
-            ...prev,
-            successCount,
-            failureCount,
-            results: [...prev.results, analysisResult],
-          } : null);
-
+          return analysisResult;
         } catch (err) {
           console.error(`Failed to process ${fileName}:`, err);
-          failureCount++;
-
-          // Add failed result
-          setResults(prev => prev ? {
-            ...prev,
-            failureCount,
-            results: [...prev.results, {
-              fileName,
-              success: false,
-              error: String(err),
-            }],
-          } : null);
+          return {
+            fileName,
+            success: false,
+            error: String(err),
+          };
         }
-      }
+      };
+
+      // Use the batch processor (parallel or sequential based on config)
+      const processResults = await processor.process(
+        queue,
+        processFile,
+        'file'
+      );
+
+      // Convert batch results to AnalysisResults
+      const analysisResults: AnalysisResult[] = processResults.map(r => r.result || {
+        fileName: r.item.fileName,
+        success: false,
+        error: r.error || 'Unknown error',
+      });
+
+      const successCount = analysisResults.filter(r => r.success).length;
+      const failureCount = analysisResults.filter(r => !r.success).length;
+
+      setResults({
+        success: true,
+        totalFiles,
+        successCount,
+        failureCount,
+        results: analysisResults,
+      });
 
       setProcessingStatus('');
-      setCurrentFileIndex(totalFiles);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       setProcessingStatus('');
-    } finally {
-      setIsProcessing(false);
-      setTotalFilesToProcess(0);
-      setCurrentFileIndex(0);
     }
   };
 
@@ -433,16 +440,16 @@ export default function Home() {
             value={ratedAspects}
             onChange={(e) => setRatedAspects(e.target.value)}
             placeholder="Example:&#10;(1) Is it a paper about UPGRADING one or more of the ICAP modes?&#10;(2) Is it about EXTENDING the ICAP theory in a new direction?&#10;..."
-            disabled={isProcessing}
+            disabled={processor.isProcessing}
             className="w-full h-48 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical font-mono text-sm text-black disabled:bg-gray-100 disabled:cursor-not-allowed"
           />
         </div>
 
         {/* Upload Section */}
         <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
-          <FileUpload onFilesSelected={handleFilesSelected} isProcessing={isProcessing} />
+          <FileUpload onFilesSelected={handleFilesSelected} isProcessing={processor.isProcessing} />
 
-          {(files.length > 0 || selectedBlobFiles.size > 0) && !isProcessing && (
+          {(files.length > 0 || selectedBlobFiles.size > 0) && !processor.isProcessing && (
             <div className="mt-6 flex flex-col items-center gap-4">
               <button
                 onClick={handleAnalyze}
@@ -454,7 +461,7 @@ export default function Home() {
           )}
 
           {/* Processing Progress Indicator */}
-          {isProcessing && totalFilesToProcess > 0 && (
+          {processor.isProcessing && processor.progress && (
             <div className="mt-6 w-full max-w-2xl mx-auto">
               {/* Progress Header */}
               <div className="flex items-center justify-between mb-2">
@@ -462,7 +469,7 @@ export default function Home() {
                   Processing files...
                 </span>
                 <span className="text-sm font-medium text-blue-600">
-                  {results?.results.length || 0} / {totalFilesToProcess} complete
+                  {processor.progress.completed} / {processor.progress.total} complete
                 </span>
               </div>
 
@@ -470,7 +477,7 @@ export default function Home() {
               <div className="w-full bg-gray-200 rounded-full h-3 mb-4 overflow-hidden">
                 <div
                   className="bg-blue-600 h-3 rounded-full transition-all duration-500 ease-out"
-                  style={{ width: `${((results?.results.length || 0) / totalFilesToProcess) * 100}%` }}
+                  style={{ width: `${(processor.progress.completed / processor.progress.total) * 100}%` }}
                 />
               </div>
 
@@ -500,7 +507,7 @@ export default function Home() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-blue-900">
-                      File {currentFileIndex + 1} of {totalFilesToProcess}
+                      Processing {Math.min(processor.config.concurrency, processor.progress.total - processor.progress.completed)} files concurrently
                     </p>
                     <p className="text-sm text-blue-700 truncate">
                       {processingStatus || 'Processing...'}
@@ -510,13 +517,13 @@ export default function Home() {
               </div>
 
               {/* Completed Files Summary */}
-              {results && results.results.length > 0 && (
+              {processor.results.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                    Completed
+                    Completed ({processor.progress.successful} succeeded, {processor.progress.failed} failed)
                   </p>
                   <div className="max-h-32 overflow-y-auto space-y-1">
-                    {results.results.map((result, idx) => (
+                    {processor.results.map((result, idx) => (
                       <div
                         key={idx}
                         className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded ${
@@ -534,7 +541,7 @@ export default function Home() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                           </svg>
                         )}
-                        <span className="truncate">{result.fileName}</span>
+                        <span className="truncate">{result.item.fileName}</span>
                       </div>
                     ))}
                   </div>
@@ -544,7 +551,7 @@ export default function Home() {
           )}
 
           {/* Error Message */}
-          {error && (
+          {(error || processor.error) && (
             <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
               <div className="flex items-center gap-2">
                 <svg
@@ -560,7 +567,7 @@ export default function Home() {
                     d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-                <p className="text-red-800 font-medium">{error}</p>
+                <p className="text-red-800 font-medium">{error || processor.error}</p>
               </div>
             </div>
           )}

@@ -6,6 +6,7 @@ import AnalysisResults from '@/components/AnalysisResults';
 import FileUpload from '@/components/FileUpload';
 import DriveFolderPicker, { ConnectionStatus } from '@/components/DriveFolderPicker';
 import DriveSyncButton, { SyncStatus } from '@/components/DriveSyncButton';
+import { useBatchProcessor } from '@/lib/hooks/use-batch-processor';
 
 interface BlobFile {
   url: string;
@@ -13,6 +14,12 @@ interface BlobFile {
   size: number;
   uploadedAt: string;
   name: string;
+}
+
+// Type for items in the processing queue
+interface QueueItem {
+  blobFile: BlobFile;
+  fileName: string;
 }
 
 interface SyncProgress {
@@ -79,12 +86,16 @@ export default function MxMLPage() {
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Analysis state
-  const [isProcessing, setIsProcessing] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<string>('');
   const [results, setResults] = useState<AnalysisResult[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [currentFileIndex, setCurrentFileIndex] = useState<number>(0);
-  const [totalFilesToProcess, setTotalFilesToProcess] = useState<number>(0);
+
+  // Batch processor hook for parallel processing (5 concurrent requests)
+  const processor = useBatchProcessor<QueueItem, AnalysisResult>({
+    defaultMode: 'parallel',
+    defaultConcurrency: 5,
+    persistConfig: false,
+  });
 
   // Prompt Inputs
   const [ratedAspects, setRatedAspects] = useState<string>(DEFAULT_ASPECTS);
@@ -457,27 +468,25 @@ export default function MxMLPage() {
       return;
     }
 
-    setIsProcessing(true);
     setError(null);
     setResults([]);
     setProcessingStatus('Initializing...');
-    setCurrentFileIndex(0);
 
     const filesToProcess = files.filter(f => selectedFiles.has(f.url));
-    const totalFiles = filesToProcess.length;
-    setTotalFilesToProcess(totalFiles);
+
+    // Build queue items
+    const queue: QueueItem[] = filesToProcess.map(f => ({
+      blobFile: f,
+      fileName: f.name,
+    }));
 
     try {
       // Import client-side parser
       const { extractTextFromPDF } = await import('@/lib/client-pdf-parser');
 
-      let successCount = 0;
-      let failureCount = 0;
-
-      // Process one file at a time, updating results as we go
-      for (let i = 0; i < filesToProcess.length; i++) {
-        const blobFile = filesToProcess[i];
-        setCurrentFileIndex(i);
+      // Process function for each file
+      const processFile = async (item: QueueItem): Promise<AnalysisResult> => {
+        const { blobFile } = item;
 
         try {
           // Step 1: Load the file
@@ -501,38 +510,36 @@ export default function MxMLPage() {
             metadata: parseResult.metadata,
           }, ratedAspects);
 
-          // Update results immediately
-          if (analysisResult.success) {
-            successCount++;
-          } else {
-            failureCount++;
-          }
-
-          setResults(prev => [...prev, analysisResult]);
-
+          return analysisResult;
         } catch (err) {
           console.error(`Failed to process ${blobFile.name}:`, err);
-          failureCount++;
-
-          // Add failed result
-          setResults(prev => [...prev, {
+          return {
             fileName: blobFile.name,
             success: false,
             error: String(err),
-          }]);
+          };
         }
-      }
+      };
 
+      // Use the batch processor (parallel or sequential based on config)
+      const processResults = await processor.process(
+        queue,
+        processFile,
+        'mxml-file'
+      );
+
+      // Convert batch results to AnalysisResults
+      const analysisResults: AnalysisResult[] = processResults.map(r => r.result || {
+        fileName: r.item.fileName,
+        success: false,
+        error: r.error || 'Unknown error',
+      });
+
+      setResults(analysisResults);
       setProcessingStatus('');
-      setCurrentFileIndex(totalFiles);
-
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       setProcessingStatus('');
-    } finally {
-      setIsProcessing(false);
-      setTotalFilesToProcess(0);
-      setCurrentFileIndex(0);
     }
   };
 
@@ -586,7 +593,7 @@ export default function MxMLPage() {
               placeholder="Paste Appendix D (Rated Aspects definitions) here..."
               value={ratedAspects}
               onChange={(e) => setRatedAspects(e.target.value)}
-              disabled={isProcessing}
+              disabled={processor.isProcessing}
             />
           </div>
         </section>
@@ -636,7 +643,7 @@ export default function MxMLPage() {
                   syncStatus={syncStatus}
                   progress={syncProgress}
                   error={syncError}
-                  disabled={isProcessing}
+                  disabled={processor.isProcessing}
                   onTriggerSync={handleTriggerSync}
                   onCancelSync={handleCancelSync}
                   onSyncComplete={() => {
@@ -841,15 +848,15 @@ export default function MxMLPage() {
         <div className="flex flex-col items-center gap-6 py-4">
           <button
             onClick={handleAnalyze}
-            disabled={isProcessing || selectedFiles.size === 0}
+            disabled={processor.isProcessing || selectedFiles.size === 0}
             className={`
               relative px-8 py-4 rounded-xl font-bold text-white text-lg shadow-xl transition-all transform
-              ${isProcessing || selectedFiles.size === 0
+              ${processor.isProcessing || selectedFiles.size === 0
                 ? 'bg-gray-400 cursor-not-allowed transform-none shadow-none'
                 : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 hover:scale-105 hover:shadow-2xl active:scale-95'}
             `}
           >
-            {isProcessing ? (
+            {processor.isProcessing ? (
               <span className="flex items-center gap-3">
                 <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -861,9 +868,9 @@ export default function MxMLPage() {
               `Analyze ${selectedFiles.size} Documents`
             )}
           </button>
-          
+
           {/* Processing Progress Indicator */}
-          {isProcessing && totalFilesToProcess > 0 && (
+          {processor.isProcessing && processor.progress && (
             <div className="w-full max-w-2xl">
               {/* Progress Header */}
               <div className="flex items-center justify-between mb-2">
@@ -871,7 +878,7 @@ export default function MxMLPage() {
                   Processing files...
                 </span>
                 <span className="text-sm font-medium text-blue-600">
-                  {results.length} / {totalFilesToProcess} complete
+                  {processor.progress.completed} / {processor.progress.total} complete
                 </span>
               </div>
 
@@ -879,7 +886,7 @@ export default function MxMLPage() {
               <div className="w-full bg-gray-200 rounded-full h-3 mb-4 overflow-hidden">
                 <div
                   className="bg-blue-600 h-3 rounded-full transition-all duration-500 ease-out"
-                  style={{ width: `${(results.length / totalFilesToProcess) * 100}%` }}
+                  style={{ width: `${(processor.progress.completed / processor.progress.total) * 100}%` }}
                 />
               </div>
 
@@ -909,7 +916,7 @@ export default function MxMLPage() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-blue-900">
-                      File {currentFileIndex + 1} of {totalFilesToProcess}
+                      Processing {Math.min(processor.config.concurrency, processor.progress.total - processor.progress.completed)} files concurrently
                     </p>
                     <p className="text-sm text-blue-700 truncate">
                       {processingStatus || 'Processing...'}
@@ -919,13 +926,13 @@ export default function MxMLPage() {
               </div>
 
               {/* Completed Files Summary */}
-              {results.length > 0 && (
+              {processor.results.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                    Completed
+                    Completed ({processor.progress.successful} succeeded, {processor.progress.failed} failed)
                   </p>
                   <div className="max-h-32 overflow-y-auto space-y-1">
-                    {results.map((result, idx) => (
+                    {processor.results.map((result, idx) => (
                       <div
                         key={idx}
                         className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded ${
@@ -943,7 +950,7 @@ export default function MxMLPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                           </svg>
                         )}
-                        <span className="truncate">{result.fileName}</span>
+                        <span className="truncate">{result.item.fileName}</span>
                       </div>
                     ))}
                   </div>
@@ -952,12 +959,12 @@ export default function MxMLPage() {
             </div>
           )}
 
-          {error && (
+          {(error || processor.error) && (
             <div className="bg-red-50 text-red-700 px-6 py-4 rounded-lg border border-red-200 flex items-center gap-3">
               <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              {error}
+              {error || processor.error}
             </div>
           )}
         </div>
