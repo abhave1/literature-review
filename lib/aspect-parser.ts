@@ -191,9 +191,16 @@ export function parseRatedAspects(ratedAspectsText: string): AspectDefinition[] 
   let match;
   const matches: { number: number; title: string; startIndex: number }[] = [];
 
+  const seenNumbers = new Set<number>();
   while ((match = aspectPattern.exec(ratedAspectsText)) !== null) {
+    const num = parseInt(match[1], 10);
+    // Only keep the first occurrence of each aspect number to avoid duplicate columns
+    if (seenNumbers.has(num)) {
+      continue;
+    }
+    seenNumbers.add(num);
     matches.push({
-      number: parseInt(match[1], 10),
+      number: num,
       title: match[2].trim(),
       startIndex: match.index + match[0].length,
     });
