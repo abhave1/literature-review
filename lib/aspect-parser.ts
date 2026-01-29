@@ -184,16 +184,18 @@ export function parseRatedAspects(ratedAspectsText: string): AspectDefinition[] 
 
   const aspects: AspectDefinition[] = [];
 
-  // Match pattern: (N) followed by the title on the same line
-  // The description follows on subsequent lines until the next (N) or end
-  const aspectPattern = /\((\d+)\)\s+([^\n]+)/g;
+  // Match pattern: (N) or N. or N) followed by the title on the same line
+  // The description follows on subsequent lines until the next aspect header or end
+  const aspectPattern = /(?:\((\d+)\)|^(\d+)[.)]\s)([^\n]+)/gm;
 
   let match;
   const matches: { number: number; title: string; startIndex: number }[] = [];
 
   const seenNumbers = new Set<number>();
   while ((match = aspectPattern.exec(ratedAspectsText)) !== null) {
-    const num = parseInt(match[1], 10);
+    // Group 1 = (N) format, Group 2 = N. format, Group 3 = title text
+    const num = parseInt(match[1] || match[2], 10);
+    const title = match[3].trim();
     // Only keep the first occurrence of each aspect number to avoid duplicate columns
     if (seenNumbers.has(num)) {
       continue;
@@ -201,7 +203,7 @@ export function parseRatedAspects(ratedAspectsText: string): AspectDefinition[] 
     seenNumbers.add(num);
     matches.push({
       number: num,
-      title: match[2].trim(),
+      title,
       startIndex: match.index + match[0].length,
     });
   }
