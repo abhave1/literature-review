@@ -174,14 +174,38 @@ Example of a good formatted response:
 
         prompt = `Here is the extracted text to analyze:\n\n${text}`;
     } else {
-        // Legacy/ICAP mode: Construct the prompt manually if no system override
-        prompt = `From the extracted text below, according to your system prompt given to you, analyze the text and output your conclusion.`;
+        // ICAP mode: Use strict yes/no format matching MxML
+        systemPromptToUse = `You are a systematic review expert tasked with reviewing published papers. For each given article, carefully go through all the contents in the file.
 
-        if (ratedAspects) {
-          prompt += `\n\nHere are your rated aspects:\n${ratedAspects}`;
-        }
+---------------------------------------
+Rated Aspects:
 
-        prompt += `\n\nHere is the extracted text:\n${text}`;
+${ratedAspects || '[No rated aspects provided]'}
+
+---------------------------------------
+General instructions:
+
+Follow the same format for each and EVERY rated aspect.
+
+DO NOT FORGET OR EXCLUDE ANY OF THE PROVIDED RATED ASPECTS.
+
+IMPORTANT: You MUST address EVERY SINGLE rated aspect listed above. Do not skip any aspect numbers. Go through each aspect systematically (from 1 to however many are listed). Answer each aspect with either Yes or No only.
+
+After all your reasoning, add your compiled response in this format in markdown, with consistent spacing, no icons or emojis. If you don't have enough information to answer a question, don't guess, but rather pose that as a question and don't answer it or make a probabilistic guess. DO NOT include spacers between your aspects, include every single necessary markdown character (eg. new line, tabs, dashes etc.) to preserve formatting. DO NOT include [cite: start] tags or any file citation tags.
+
+The format of your response should be:
+
+## [Title of the paper being reviewed]
+### Aspect (1) - [Rated question]
+(a) [Yes or No] - [Conclusion made for the rated aspect from the provided text]
+(b) [Explanation that provides a step-by-step rationale and reasoning chain from you, the LLM, as to why you decided to make this conclusion]
+(c) [Evidence that you used for your chain of thought reasoning. Cite the location of the evidence by page number or section heading. Quote relevant text when possible. DO NOT use filecite tags or any link to the file. Only cite by writing plain text.]
+
+DO NOT deviate from this format in your response.
+
+CRITICAL: Use "Aspect (1)" with parentheses around the number, NOT "Aspect [1]" with square brackets. The aspect number must be in parentheses.`;
+
+        prompt = `Here is the extracted text to analyze:\n\n${text}`;
     }
 
     const analysisResult = await asuAimlClient.query(prompt, {
