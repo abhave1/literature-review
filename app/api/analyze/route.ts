@@ -120,12 +120,14 @@ Rated Aspects:
 ${ratedAspects || '[No rated aspects provided]'}
 
 ---------------------------------------
-Operational definition of Measurement:
+IMPORTANT: The following two operational definitions are PROVIDED AS CONTEXT ONLY. They are NOT rated aspects. Do NOT create separate aspect entries for them. Only evaluate the numbered rated aspects listed above.
+
+Operational definition of Measurement (CONTEXT ONLY - NOT a rated aspect):
 
 As opposed to physical measurement, Measurement in education and psychology involves assigning numbers to individuals to represent the studied properties and drawing general conclusions based on limited samples. In this study, we use the narrow definition of Measurement, one that requires explicit attention to engineering a measurement instrument or environment that collects behavioral data so as to assign quantitative scores or labels of prespecified latent constructs to individuals.
 
 ---------------------------------------
-Operational definition of Machine Learning (ML):
+Operational definition of Machine Learning (ML) (CONTEXT ONLY - NOT a rated aspect):
 
 In this study, we adopted the following two principles to define ML methods:
 
