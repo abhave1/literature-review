@@ -9,6 +9,7 @@ export interface ParsedAspect {
   subsectionA: string;
   subsectionB: string;
   subsectionC: string;
+  subsectionD: string;
   rawContent: string;
 }
 
@@ -91,6 +92,7 @@ export function parseAspects(analysisText: string): ParsedAnalysis {
     const subsectionA = extractSubsection(sectionTrimmed, 'a');
     const subsectionB = extractSubsection(sectionTrimmed, 'b');
     const subsectionC = extractSubsection(sectionTrimmed, 'c');
+    const subsectionD = extractSubsection(sectionTrimmed, 'd');
 
     aspects.push({
       aspectNumber,
@@ -98,6 +100,7 @@ export function parseAspects(analysisText: string): ParsedAnalysis {
       subsectionA,
       subsectionB,
       subsectionC,
+      subsectionD,
       rawContent: sectionTrimmed,
     });
   }

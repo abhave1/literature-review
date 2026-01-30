@@ -98,6 +98,9 @@ export function exportToExcel(results: AnalysisResult[], ratedAspects?: string):
         if (aspect.subsectionC) {
           combinedContent += combinedContent ? `\n\n(c) ${aspect.subsectionC}` : `(c) ${aspect.subsectionC}`;
         }
+        if (aspect.subsectionD) {
+          combinedContent += combinedContent ? `\n\n(d) ${aspect.subsectionD}` : `(d) ${aspect.subsectionD}`;
+        }
 
         // Store by aspect NUMBER for consistent matching
         aspectByNumber.set(aspect.aspectNumber, combinedContent);
@@ -214,6 +217,9 @@ export function exportToCSV(results: AnalysisResult[], ratedAspects?: string): v
         if (aspect.subsectionC) {
           combinedContent += combinedContent ? `\n\n(c) ${aspect.subsectionC}` : `(c) ${aspect.subsectionC}`;
         }
+        if (aspect.subsectionD) {
+          combinedContent += combinedContent ? `\n\n(d) ${aspect.subsectionD}` : `(d) ${aspect.subsectionD}`;
+        }
 
         // Store by aspect NUMBER for consistent matching
         aspectByNumber.set(aspect.aspectNumber, combinedContent);
@@ -329,9 +335,11 @@ export function exportFilteredToExcel(results: AnalysisResult[], ratedAspects?: 
       const aspectByNumber = new Map<number, string>();
 
       for (const aspect of parsed.aspects) {
-        // Only include subsection (a), filtered before dash
-        if (aspect.subsectionA) {
-          const filtered = filterBeforeDash(aspect.subsectionA);
+        // Yes/No answer is in subsection (b) (subsection (a) is exclusion check)
+        // Fall back to subsection (a) for backward compatibility with old format
+        const answerSubsection = aspect.subsectionB || aspect.subsectionA;
+        if (answerSubsection) {
+          const filtered = filterBeforeDash(answerSubsection);
           aspectByNumber.set(aspect.aspectNumber, filtered);
         }
       }

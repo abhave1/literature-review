@@ -144,35 +144,52 @@ DO NOT FORGET OR EXCLUDE ANY OF THE PROVIDED RATED ASPECTS.
 
 IMPORTANT: You MUST address EVERY SINGLE rated aspect listed above. Do not skip any aspect numbers. Go through each aspect systematically (from 1 to however many are listed). Answer each aspect with either Yes or No only.
 
+CRITICAL: Some rated aspects contain EXCLUSION criteria (e.g., "EXCLUDE EACH AND ALL OF the following types:" followed by bullet points). When exclusion criteria are present, you MUST follow this procedure:
+1. First, determine if the paper meets the INCLUSION criteria (the main question).
+2. Then, BEFORE giving your final answer, explicitly check EACH exclusion criterion listed.
+3. If the paper matches ANY exclusion criterion, your final answer MUST be No, regardless of whether it meets the inclusion criteria.
+Exclusion criteria ALWAYS override inclusion criteria.
+
 After all your reasoning, add your compiled response in this format in markdown, with consistent spacing, no icons or emojis. If you don't have enough information to answer a question, don't guess, but rather pose that as a question and don't answer it or make a probabilistic guess. DO NOT include spacers between your aspects, include every single necessary markdown character (eg. new line, tabs, dashes etc.) to preserve formatting. DO NOT include [cite: start] tags or any file citation tags.
 
 The format of your response should be:
 
 ## [Title of the paper being reviewed]
 ### Aspect (1) - [Rated question]
-(a) [Yes or No] - [Conclusion made for the rated aspect from the provided text]
-(b) [Explanation that provides a step-by-step rationale and reasoning chain from you, the LLM, as to why you decided to make this conclusion]
-(c) [Evidence that you used for your chain of thought reasoning. Cite the location of the evidence by page number or section heading. Quote relevant text when possible. DO NOT use filecite tags or any link to the file. Only cite by writing plain text.]
+(a) [Exclusion check: For each exclusion criterion in the rated aspect, state whether it applies to this paper and why. If no exclusion criteria exist for this aspect, write "No exclusion criteria for this aspect."]
 
-DO NOT deviate from this format in your response.
+(b) [Yes or No] - [Final conclusion. If any exclusion criterion from (a) applies, this MUST be No.]
+
+(c) [Explanation that provides a step-by-step rationale and reasoning chain from you, the LLM, as to why you decided to make this conclusion]
+
+(d) [Evidence that you used for your chain of thought reasoning. Cite the location of the evidence by page number or section heading. Quote relevant text when possible. DO NOT use filecite tags or any link to the file. Only cite by writing plain text.]
+
+DO NOT deviate from this format in your response. Each subsection (a), (b), (c), (d) MUST be on its own separate paragraph with a blank line before it.
 
 CRITICAL: Use "Aspect (1)" with parentheses around the number, NOT "Aspect [1]" with square brackets. The aspect number must be in parentheses.
 
-Example of a good formatted response:
+Example of a good formatted response for an aspect WITH exclusion criteria:
+
+### Aspect (7) - Does this paper FOCUS ON applying machine learning methods in the context of differential item functioning detection? EXCLUDE papers that only mention or discuss DIF without focusing on it.
+(a) Exclusion check:
+- "Papers that only mention or discuss DIF without focusing on it": APPLIES. The paper only mentions DIF as a motivating example on page 1 but focuses on a general tree boosting method. DIF is not the central topic.
+
+(b) No - Although the paper mentions DIF, it is excluded because it only discusses DIF as a side example, not as the central focus.
+
+(c) The paper's main contribution is a general multivariate tree boosting method. DIF is mentioned once as a motivating application but the paper does not develop, test, or evaluate any DIF detection method.
+
+(d) "For instance, in the context of psychological testing, it is important to discover grouping variables that influence particular items in a test, indicating differential item functioning." Located on Page 1. This is the only mention of DIF in the entire paper.
+
+Example of a good formatted response for an aspect WITHOUT exclusion criteria:
 
 ### Aspect (1) - Does this paper study machine learning methods in the context of automatic text or speech scoring?
-(a) Yes - The paper studies neural network methods for automated essay scoring.
+(a) No exclusion criteria for this aspect.
 
-(b) The abstract states the paper develops and evaluates machine learning approaches for automatically scoring written essays. The methods section details the implementation of deep learning architectures trained on human-scored essay data. The results demonstrate the system's ability to assign scores comparable to human raters.
+(b) Yes - The paper studies neural network methods for automated essay scoring.
 
-(c) "This study develops machine learning methods for automated essay scoring, training neural networks on a corpus of human-scored essays..." "The system achieved agreement rates of 0.85 with human raters." Located in the Abstract and Methods sections.
+(c) The abstract states the paper develops and evaluates machine learning approaches for automatically scoring written essays. The methods section details the implementation of deep learning architectures trained on human-scored essay data.
 
-### Aspect (16) - Is the main focus of this paper a CONCEPTUAL discussion of the applications of machine learning methods in measurement practice?
-(a) No - The paper's main focus is empirical evaluation of a scoring system, not a conceptual discussion.
-
-(b) While the introduction provides some background on ML in measurement, the primary contribution is the development and empirical testing of an automated scoring algorithm. The paper presents experimental results rather than serving as a review or conceptual discussion piece.
-
-(c) "The primary contribution of this study is the development and evaluation of an automated scoring system..." "Our experiments demonstrate..." The paper structure emphasizes methodology and results over conceptual discussion.`;
+(d) "This study develops machine learning methods for automated essay scoring, training neural networks on a corpus of human-scored essays..." Located in the Abstract and Methods sections.`;
 
         prompt = `Here is the extracted text to analyze:\n\n${text}`;
     } else {
