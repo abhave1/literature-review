@@ -335,9 +335,8 @@ export function exportFilteredToExcel(results: AnalysisResult[], ratedAspects?: 
       const aspectByNumber = new Map<number, string>();
 
       for (const aspect of parsed.aspects) {
-        // Yes/No answer is in subsection (b) (subsection (a) is exclusion check)
-        // Fall back to subsection (a) for backward compatibility with old format
-        const answerSubsection = aspect.subsectionB || aspect.subsectionA;
+        // Yes/No answer is in subsection (a) (e.g., "(a) No - explanation")
+        const answerSubsection = aspect.subsectionA;
         if (answerSubsection) {
           const filtered = filterBeforeDash(answerSubsection);
           aspectByNumber.set(aspect.aspectNumber, filtered);

@@ -155,14 +155,14 @@ After all your reasoning, add your compiled response in this format in markdown,
 The format of your response should be:
 
 ## [Title of the paper being reviewed]
+
 ### Aspect (1) - [Rated question]
-(a) [Exclusion check: For each exclusion criterion in the rated aspect, state whether it applies to this paper and why. If no exclusion criteria exist for this aspect, write "No exclusion criteria for this aspect."]
 
-(b) [Yes or No] - [Final conclusion. If any exclusion criterion from (a) applies, this MUST be No.]
+(a) [Yes or No] - [Final conclusion. If any exclusion criterion from (a) applies, this MUST be No.]
 
-(c) [Explanation that provides a step-by-step rationale and reasoning chain from you, the LLM, as to why you decided to make this conclusion]
+(b) [Explanation that provides a step-by-step rationale and reasoning chain from you, the LLM, as to why you decided to make this conclusion]
 
-(d) [Evidence that you used for your chain of thought reasoning. Cite the location of the evidence by page number or section heading. Quote relevant text when possible. DO NOT use filecite tags or any link to the file. Only cite by writing plain text.]
+(c) [Evidence that you used for your chain of thought reasoning. Cite the location of the evidence by page number or section heading. Quote relevant text when possible. DO NOT use filecite tags or any link to the file. Only cite by writing plain text.]
 
 DO NOT deviate from this format in your response. Each subsection (a), (b), (c), (d) MUST be on its own separate paragraph with a blank line before it.
 
@@ -171,25 +171,20 @@ CRITICAL: Use "Aspect (1)" with parentheses around the number, NOT "Aspect [1]" 
 Example of a good formatted response for an aspect WITH exclusion criteria:
 
 ### Aspect (7) - Does this paper FOCUS ON applying machine learning methods in the context of differential item functioning detection? EXCLUDE papers that only mention or discuss DIF without focusing on it.
-(a) Exclusion check:
-- "Papers that only mention or discuss DIF without focusing on it": APPLIES. The paper only mentions DIF as a motivating example on page 1 but focuses on a general tree boosting method. DIF is not the central topic.
+(a) No - Although the paper mentions DIF, it is excluded because it only discusses DIF as a side example, not as the central focus.
 
-(b) No - Although the paper mentions DIF, it is excluded because it only discusses DIF as a side example, not as the central focus.
+(b) The paper's main contribution is a general multivariate tree boosting method. DIF is mentioned once as a motivating application but the paper does not develop, test, or evaluate any DIF detection method.
 
-(c) The paper's main contribution is a general multivariate tree boosting method. DIF is mentioned once as a motivating application but the paper does not develop, test, or evaluate any DIF detection method.
-
-(d) "For instance, in the context of psychological testing, it is important to discover grouping variables that influence particular items in a test, indicating differential item functioning." Located on Page 1. This is the only mention of DIF in the entire paper.
+(c) "For instance, in the context of psychological testing, it is important to discover grouping variables that influence particular items in a test, indicating differential item functioning." Located on Page 1. This is the only mention of DIF in the entire paper.
 
 Example of a good formatted response for an aspect WITHOUT exclusion criteria:
 
 ### Aspect (1) - Does this paper study machine learning methods in the context of automatic text or speech scoring?
-(a) No exclusion criteria for this aspect.
+(a) Yes - The paper studies neural network methods for automated essay scoring.
 
-(b) Yes - The paper studies neural network methods for automated essay scoring.
+(b) The abstract states the paper develops and evaluates machine learning approaches for automatically scoring written essays. The methods section details the implementation of deep learning architectures trained on human-scored essay data.
 
-(c) The abstract states the paper develops and evaluates machine learning approaches for automatically scoring written essays. The methods section details the implementation of deep learning architectures trained on human-scored essay data.
-
-(d) "This study develops machine learning methods for automated essay scoring, training neural networks on a corpus of human-scored essays..." Located in the Abstract and Methods sections.`;
+(c) "This study develops machine learning methods for automated essay scoring, training neural networks on a corpus of human-scored essays..." Located in the Abstract and Methods sections.`;
 
         prompt = `Here is the extracted text to analyze:\n\n${text}`;
     } else {
