@@ -89,10 +89,18 @@ export function parseAspects(analysisText: string): ParsedAnalysis {
     const aspectTitle = normalizeTitle(aspectHeaderMatch[2]);
 
     // Extract subsections (a), (b), (c)
-    const subsectionA = extractSubsection(sectionTrimmed, 'a');
-    const subsectionB = extractSubsection(sectionTrimmed, 'b');
-    const subsectionC = extractSubsection(sectionTrimmed, 'c');
-    const subsectionD = extractSubsection(sectionTrimmed, 'd');
+    let subsectionA = extractSubsection(sectionTrimmed, 'a');
+    let subsectionB = extractSubsection(sectionTrimmed, 'b');
+    let subsectionC = extractSubsection(sectionTrimmed, 'c');
+    let subsectionD = extractSubsection(sectionTrimmed, 'd');
+
+    // Fallback: if no (a)/(b)/(c) subsections found, treat the body (minus header) as subsection (a)
+    if (!subsectionA && !subsectionB && !subsectionC) {
+      const headerEnd = sectionTrimmed.indexOf('\n');
+      if (headerEnd !== -1) {
+        subsectionA = sectionTrimmed.substring(headerEnd + 1).trim();
+      }
+    }
 
     aspects.push({
       aspectNumber,

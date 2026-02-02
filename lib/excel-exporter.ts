@@ -258,11 +258,22 @@ export function exportToCSV(results: AnalysisResult[], ratedAspects?: string): v
  * Removes reasoning/conclusions, keeping only the answer part
  */
 function filterBeforeDash(text: string): string {
-  const dashIndex = text.indexOf(' - ');
-  if (dashIndex === -1) {
-    return text.trim();
+  const trimmed = text.trim();
+
+  // If there's a " - " separator, take everything before it
+  const dashIndex = trimmed.indexOf(' - ');
+  if (dashIndex !== -1) {
+    return trimmed.substring(0, dashIndex).trim();
   }
-  return text.substring(0, dashIndex).trim();
+
+  // No dash found — try to extract Yes/No from the start of the text
+  const yesNoMatch = trimmed.match(/^(Yes|No)\b/i);
+  if (yesNoMatch) {
+    return yesNoMatch[1];
+  }
+
+  // Text doesn't follow expected format at all — return a fallback
+  return 'See full analysis';
 }
 
 /**

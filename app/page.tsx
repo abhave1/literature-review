@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import FileUpload from '@/components/FileUpload';
 import AnalysisResults from '@/components/AnalysisResults';
 import AccessKeyPrompt from '@/components/AccessKeyPrompt';
@@ -181,6 +181,9 @@ export default function Home() {
       // Dynamically import the PDF parser
       const { extractTextFromPDF } = await import('@/lib/client-pdf-parser');
 
+      // Accumulate completed results in a ref to avoid stale closures
+      const completedRef: AnalysisResult[] = [];
+
       // Process function for each file
       const processFile = async (item: QueueItem): Promise<AnalysisResult> => {
         const fileName = item.fileName;
@@ -211,41 +214,44 @@ export default function Home() {
             metadata: parseResult.metadata,
           }, ratedAspects);
 
+          // Update results incrementally so completed files are viewable immediately
+          completedRef.push(analysisResult);
+          setResults({
+            success: true,
+            totalFiles,
+            successCount: completedRef.filter(r => r.success).length,
+            failureCount: completedRef.filter(r => !r.success).length,
+            results: [...completedRef],
+          });
+
           return analysisResult;
         } catch (err) {
           console.error(`Failed to process ${fileName}:`, err);
-          return {
+          const errorResult: AnalysisResult = {
             fileName,
             success: false,
             error: String(err),
           };
+
+          completedRef.push(errorResult);
+          setResults({
+            success: true,
+            totalFiles,
+            successCount: completedRef.filter(r => r.success).length,
+            failureCount: completedRef.filter(r => !r.success).length,
+            results: [...completedRef],
+          });
+
+          return errorResult;
         }
       };
 
       // Use the batch processor (parallel or sequential based on config)
-      const processResults = await processor.process(
+      await processor.process(
         queue,
         processFile,
         'file'
       );
-
-      // Convert batch results to AnalysisResults
-      const analysisResults: AnalysisResult[] = processResults.map(r => r.result || {
-        fileName: r.item.fileName,
-        success: false,
-        error: r.error || 'Unknown error',
-      });
-
-      const successCount = analysisResults.filter(r => r.success).length;
-      const failureCount = analysisResults.filter(r => !r.success).length;
-
-      setResults({
-        success: true,
-        totalFiles,
-        successCount,
-        failureCount,
-        results: analysisResults,
-      });
 
       setProcessingStatus('');
     } catch (err) {

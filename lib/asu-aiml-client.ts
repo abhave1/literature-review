@@ -147,7 +147,9 @@ export class AsuAimlClient {
 
         // Check for retryable HTTP errors
         if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
-          const error: any = new Error(`HTTP ${response.status}: ${response.statusText}`);
+          let body = '';
+          try { body = await response.text(); } catch {}
+          const error: any = new Error(`HTTP ${response.status}: ${response.statusText} — ${body}`);
           error.status = response.status;
           throw error;
         }

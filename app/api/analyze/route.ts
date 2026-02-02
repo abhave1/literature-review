@@ -166,6 +166,10 @@ The format of your response should be:
 
 DO NOT deviate from this format in your response. Each subsection (a), (b), (c), (d) MUST be on its own separate paragraph with a blank line before it.
 
+You MUST start each subsection with the letter label in parentheses: (a), (b), (c).
+(a) MUST begin with exactly "Yes" or "No" followed by " - " and then your conclusion. Example: (a) Yes - The paper focuses on...
+Do NOT omit the " - " separator. Do NOT write free-form text without the Yes/No prefix in subsection (a).
+
 CRITICAL: Use "Aspect (1)" with parentheses around the number, NOT "Aspect [1]" with square brackets. The aspect number must be in parentheses.
 
 Example of a good formatted response for an aspect WITH exclusion criteria:
@@ -215,7 +219,11 @@ The format of your response should be:
 (b) [Explanation that provides a step-by-step rationale and reasoning chain from you, the LLM, as to why you decided to make this conclusion]
 (c) [Evidence that you used for your chain of thought reasoning. Cite the location of the evidence by page number or section heading. Quote relevant text when possible. DO NOT use filecite tags or any link to the file. Only cite by writing plain text.]
 
-DO NOT deviate from this format in your response.
+DO NOT deviate from this format in your response. Each subsection (a), (b), (c) MUST be on its own separate paragraph with a blank line before it.
+
+You MUST start each subsection with the letter label in parentheses: (a), (b), (c).
+(a) MUST begin with exactly "Yes" or "No" followed by " - " and then your conclusion. Example: (a) Yes - The paper focuses on...
+Do NOT omit the " - " separator. Do NOT write free-form text without the Yes/No prefix in subsection (a).
 
 CRITICAL: Use "Aspect (1)" with parentheses around the number, NOT "Aspect [1]" with square brackets. The aspect number must be in parentheses.`;
 
@@ -243,11 +251,12 @@ CRITICAL: Use "Aspect (1)" with parentheses around the number, NOT "Aspect [1]" 
       },
     };
   } catch (error) {
-    console.error(`Error analyzing ${fileName}:`, error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`Error analyzing ${fileName}: ${errorMsg}`, error);
     return {
       fileName,
       success: false,
-      error: String(error),
+      error: `Analysis failed for "${fileName}": ${errorMsg}`,
     };
   }
 }
