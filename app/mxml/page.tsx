@@ -7,6 +7,7 @@ import FileUpload from '@/components/FileUpload';
 import DriveFolderPicker, { ConnectionStatus } from '@/components/DriveFolderPicker';
 import DriveSyncButton, { SyncStatus } from '@/components/DriveSyncButton';
 import { useBatchProcessor } from '@/lib/hooks/use-batch-processor';
+import { DEFAULT_MXML_SYSTEM_PROMPT, DEFAULT_ASPECTS } from '@/lib/prompts/default-mxml-prompt';
 
 interface BlobFile {
   url: string;
@@ -39,40 +40,6 @@ interface AnalysisResult {
   error?: string;
 }
 
-const DEFAULT_ASPECTS = `(1) Does this paper study machine learning methods in the context of automatic text or speech scoring, that is, automatically assigning scores or labels to open-ended responses (e.g., essays, speech) as an alternative to grading by humans?
-
-(2) Does this paper study machine learning methods in the context of discrete or continuous trait scoring, that is, assigning scores or estimates of continuous traits (e.g., proficiency, personality) or discrete classes (e.g., cluster labels, skill mastery)?
-
-(3) Does this paper study machine learning methods in the context of standard setting, that is, establishing specific criteria and cut scores for different levels of proficiency in a particular domain?
-
-(4) Does this paper study machine learning methods in the context of item or instrument development, that is, generation of questions, tasks, or instruments? Exclude applications in the context of shortening existing tests.
-
-(5) Does this paper study machine learning methods in the context of short form construction, that is, selecting a subset of items for a short form to meet specific constraints and/or to optimize some objective?
-
-(6) Does this paper study machine learning methods in the context of item review and analysis, that is, statistical evaluation of a task/question's reliability, validity, and other characteristics (e.g., relevant behavioral evidence)? Exclude applications in the context of differential item functioning or differential rater functioning analyses.
-
-(7) Does this paper study machine learning methods in the context of differential item functioning detection or differential rater functioning detection, that is, flagging subsets of items or raters that function differently across subgroups?
-
-(8) Does this paper study machine learning methods in the context of aberrant response detection, that is, flagging subsets of examinees whose observed data deviates from normal test-taking (e.g., insufficient effort responding or cheating)?
-
-(9) Does this paper study machine learning methods in the context of process data analysis, that is, analysis of computer-logged, time-stamped sequence of actions performed by an examinee (e.g., clickstreams and keystrokes) in pursuit of solving an item?
-
-(10) Does this paper study the application of machine learning methods to choosing among candidate models, including the use of regularization to adjust model capacity, or performing variable selection, often based on model-data fit, predictive performance, and simplicity?
-
-(11) Does this paper study the extension to existing measurement or psychometric models with machine learning methods?
-
-(12) Does this paper study the application of machine learning methods to estimating measurement or psychometric model parameters?
-
-(13) Does this paper study machine learning methods in the context of examining measurement validity based on internal structure, that is, to what extent the relationships among test items and test components conform to the construct being measured?
-
-(14) Does this paper study machine learning methods in the context of examining measurement validity based on test content, that is, relationship between the content of a test (e.g., the themes, wording, and format) and the construct being measured?
-
-(15) Does this paper study machine learning methods in the context of examining measurement validity based on relations to other variables, that is, the relationship of test scores to variables external to the test (e.g., predictive validity, concurrent validity, convergent validity, divergent validity)?
-
-(16) Is the main focus of this paper a CONCEPTUAL discussion of the applications of machine learning methods in measurement practice, that is, reviews and non-technical discussions on the role of machine learning in measurement?
-
-(17) Is the main focus of this paper an overview and tutorials of machine learning without referencing specific measurement contexts?`;
-
 export default function MxMLPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
@@ -98,7 +65,13 @@ export default function MxMLPage() {
   });
 
   // Prompt Inputs
+  const [systemPrompt, setSystemPrompt] = useState<string>(DEFAULT_MXML_SYSTEM_PROMPT);
   const [ratedAspects, setRatedAspects] = useState<string>(DEFAULT_ASPECTS);
+  const [isLoadingPrompt, setIsLoadingPrompt] = useState(true);
+  const [isSavingPrompt, setIsSavingPrompt] = useState(false);
+  const [promptSaveStatus, setPromptSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
+  const [showSystemPrompt, setShowSystemPrompt] = useState(false);
+  const [promptIsDefault, setPromptIsDefault] = useState(true);
 
   // Google Drive Sync state
   const [driveConnectionStatus, setDriveConnectionStatus] = useState<ConnectionStatus>('disconnected');
@@ -142,8 +115,76 @@ export default function MxMLPage() {
   useEffect(() => {
     if (isAuthenticated) {
       loadFiles();
+      loadPrompt();
     }
   }, [isAuthenticated]);
+
+  // Load saved prompt from Vercel KV
+  const loadPrompt = async () => {
+    setIsLoadingPrompt(true);
+    try {
+      const res = await fetch('/api/prompt');
+      const data = await res.json();
+      if (data.systemPrompt) {
+        setSystemPrompt(data.systemPrompt);
+      }
+      if (data.ratedAspects) {
+        setRatedAspects(data.ratedAspects);
+      }
+      setPromptIsDefault(data.isDefault ?? true);
+    } catch (err) {
+      console.error('Failed to load prompt:', err);
+      // Keep defaults on error
+    } finally {
+      setIsLoadingPrompt(false);
+    }
+  };
+
+  // Save prompt to Vercel KV
+  const savePrompt = async () => {
+    setIsSavingPrompt(true);
+    setPromptSaveStatus('idle');
+    try {
+      const res = await fetch('/api/prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ systemPrompt, ratedAspects }),
+      });
+      if (!res.ok) {
+        throw new Error('Failed to save');
+      }
+      setPromptSaveStatus('saved');
+      setPromptIsDefault(false);
+      // Clear status after 3 seconds
+      setTimeout(() => setPromptSaveStatus('idle'), 3000);
+    } catch (err) {
+      console.error('Failed to save prompt:', err);
+      setPromptSaveStatus('error');
+    } finally {
+      setIsSavingPrompt(false);
+    }
+  };
+
+  // Reset prompt to defaults
+  const resetPrompt = async () => {
+    if (!confirm('Reset prompt to defaults? This will delete your saved customizations.')) {
+      return;
+    }
+    setIsSavingPrompt(true);
+    try {
+      await fetch('/api/prompt', { method: 'DELETE' });
+      setSystemPrompt(DEFAULT_MXML_SYSTEM_PROMPT);
+      setRatedAspects(DEFAULT_ASPECTS);
+      setPromptIsDefault(true);
+      setPromptSaveStatus('saved');
+      setTimeout(() => setPromptSaveStatus('idle'), 3000);
+    } catch (err) {
+      console.error('Failed to reset prompt:', err);
+      setPromptSaveStatus('error');
+    } finally {
+      setIsSavingPrompt(false);
+    }
+  };
 
   const loadFiles = async () => {
     setIsLoadingFiles(true);
@@ -422,7 +463,8 @@ export default function MxMLPage() {
   // Helper function to analyze a single file
   const analyzeSingleFile = async (
     file: { fileName: string; text: string; metadata: any },
-    aspects?: string
+    aspects?: string,
+    customSystemPrompt?: string
   ): Promise<AnalysisResult> => {
     try {
       const response = await fetch('/api/analyze', {
@@ -436,6 +478,7 @@ export default function MxMLPage() {
             extractionSuccess: true,
           }],
           ratedAspects: aspects?.trim() || undefined,
+          customSystemPrompt: customSystemPrompt?.trim() || undefined,
           useMxmlPrompt: true,
         }),
       });
@@ -508,7 +551,7 @@ export default function MxMLPage() {
             fileName: blobFile.name,
             text: parseResult.text,
             metadata: parseResult.metadata,
-          }, ratedAspects);
+          }, ratedAspects, systemPrompt);
 
           return analysisResult;
         } catch (err) {
@@ -583,18 +626,120 @@ export default function MxMLPage() {
         
         {/* Step 1: Configuration */}
         <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-800">1. Configure Rated Aspects</h2>
-            <p className="text-sm text-gray-500">These topics will be extracted from each paper.</p>
+          <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                1. Configure Prompt
+                {!promptIsDefault && (
+                  <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">Customized</span>
+                )}
+              </h2>
+              <p className="text-sm text-gray-500">Edit the system prompt and rated aspects for analysis.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {promptSaveStatus === 'saved' && (
+                <span className="text-sm text-green-600 flex items-center gap-1">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Saved
+                </span>
+              )}
+              {promptSaveStatus === 'error' && (
+                <span className="text-sm text-red-600">Save failed</span>
+              )}
+              <button
+                onClick={resetPrompt}
+                disabled={isSavingPrompt || processor.isProcessing || promptIsDefault}
+                className={`
+                  px-3 py-1.5 text-sm font-medium rounded-lg transition-all
+                  ${promptIsDefault
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}
+                `}
+              >
+                Reset to Default
+              </button>
+              <button
+                onClick={savePrompt}
+                disabled={isSavingPrompt || processor.isProcessing}
+                className={`
+                  px-4 py-1.5 text-sm font-medium rounded-lg text-white transition-all
+                  ${isSavingPrompt || processor.isProcessing
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700'}
+                `}
+              >
+                {isSavingPrompt ? 'Saving...' : 'Save Prompt'}
+              </button>
+            </div>
           </div>
-          <div className="p-6">
-            <textarea
-              className="w-full h-64 p-4 border border-gray-300 rounded-lg font-mono text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-              placeholder="Paste Appendix D (Rated Aspects definitions) here..."
-              value={ratedAspects}
-              onChange={(e) => setRatedAspects(e.target.value)}
-              disabled={processor.isProcessing}
-            />
+
+          <div className="p-6 space-y-6">
+            {isLoadingPrompt ? (
+              <div className="flex items-center justify-center py-8 text-gray-500">
+                <svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Loading saved prompt...
+              </div>
+            ) : (
+              <>
+                {/* Rated Aspects (Always Visible) */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Rated Aspects
+                    <span className="text-gray-400 font-normal ml-2">- These questions will be evaluated for each paper</span>
+                  </label>
+                  <textarea
+                    className="w-full h-64 p-4 border border-gray-300 rounded-lg font-mono text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    placeholder="Paste Appendix D (Rated Aspects definitions) here..."
+                    value={ratedAspects}
+                    onChange={(e) => setRatedAspects(e.target.value)}
+                    disabled={processor.isProcessing}
+                  />
+                </div>
+
+                {/* System Prompt (Collapsible) */}
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setShowSystemPrompt(!showSystemPrompt)}
+                    className="w-full px-4 py-3 bg-gray-50 hover:bg-gray-100 flex justify-between items-center transition-colors"
+                  >
+                    <span className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                      <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                      </svg>
+                      System Prompt (Advanced)
+                    </span>
+                    <svg
+                      className={`w-5 h-5 text-gray-400 transition-transform ${showSystemPrompt ? 'rotate-180' : ''}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {showSystemPrompt && (
+                    <div className="p-4 border-t border-gray-200">
+                      <p className="text-sm text-gray-500 mb-3">
+                        This is the full system prompt sent to the AI. Use <code className="bg-gray-100 px-1 py-0.5 rounded text-xs">{'{{RATED_ASPECTS}}'}</code> as a placeholder where rated aspects will be inserted.
+                      </p>
+                      <textarea
+                        className="w-full h-96 p-4 border border-gray-300 rounded-lg font-mono text-xs bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                        placeholder="Enter the full system prompt..."
+                        value={systemPrompt}
+                        onChange={(e) => setSystemPrompt(e.target.value)}
+                        disabled={processor.isProcessing}
+                      />
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </section>
 

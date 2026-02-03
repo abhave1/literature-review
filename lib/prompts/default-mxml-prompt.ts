@@ -1,133 +1,50 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { asuAimlClient } from '@/lib/asu-aiml-client';
-
-export const runtime = 'nodejs';
-export const maxDuration = 300; // 5 minutes max
-
-interface AnalysisResult {
-  fileName: string;
-  success: boolean;
-  data?: {
-    extractedText: string;
-    metadata: any;
-    analysis: any;
-  };
-  error?: string;
-}
-
-interface FileInput {
-  fileName: string;
-  text: string;
-  metadata?: any;
-  extractionSuccess: boolean;
-  extractionError?: string;
-}
-
 /**
- * POST /api/analyze
- * Accepts extracted text from PDFs (parsed client-side) and analyzes them with AI
- * This simplified approach avoids server-side PDF parsing and dependency issues
+ * Default MxML System Prompt and Rated Aspects
+ * These can be customized and saved via the UI
  */
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const files: FileInput[] = body.files;
-    const ratedAspects: string | undefined = body.ratedAspects;
-    const customSystemPrompt: string | undefined = body.customSystemPrompt;
-    const useMxmlPrompt: boolean = body.useMxmlPrompt || false;
 
-    if (!files || files.length === 0) {
-      return NextResponse.json(
-        { error: 'No files provided' },
-        { status: 400 }
-      );
-    }
+export const DEFAULT_ASPECTS = `(1) Does this paper study machine learning methods in the context of automatic text or speech scoring, that is, automatically assigning scores or labels to open-ended responses (e.g., essays, speech) as an alternative to grading by humans?
 
-    console.log(`Received ${files.length} files for analysis`);
-    console.log(`Using MxML prompt: ${useMxmlPrompt}`);
-    if (ratedAspects) {
-      console.log(`Using rated aspects: ${ratedAspects.substring(0, 100)}...`);
-    }
+(2) Does this paper study machine learning methods in the context of discrete or continuous trait scoring, that is, assigning scores or estimates of continuous traits (e.g., proficiency, personality) or discrete classes (e.g., cluster labels, skill mastery)?
 
-    // Process files sequentially
-    const results: AnalysisResult[] = [];
-    for (const file of files) {
-      const result = await analyzeText(file, ratedAspects, useMxmlPrompt, customSystemPrompt);
-      results.push(result);
-    }
+(3) Does this paper study machine learning methods in the context of standard setting, that is, establishing specific criteria and cut scores for different levels of proficiency in a particular domain?
 
-    // Return results
-    return NextResponse.json({
-      success: true,
-      totalFiles: files.length,
-      successCount: results.filter((r) => r.success).length,
-      failureCount: results.filter((r) => !r.success).length,
-      results,
-    });
-  } catch (error) {
-    console.error('API error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error', details: String(error) },
-      { status: 500 }
-    );
-  }
-}
+(4) Does this paper study machine learning methods in the context of item or instrument development, that is, generation of questions, tasks, or instruments? Exclude applications in the context of shortening existing tests.
 
-/**
- * Analyze extracted text with ASU AIML API
- * Text extraction is done client-side, so this only handles the AI analysis
- */
-async function analyzeText(
-  file: FileInput,
-  ratedAspects?: string,
-  useMxmlPrompt: boolean = false,
-  customSystemPrompt?: string
-): Promise<AnalysisResult> {
-  const { fileName, text, metadata, extractionSuccess, extractionError } = file;
+(5) Does this paper study machine learning methods in the context of short form construction, that is, selecting a subset of items for a short form to meet specific constraints and/or to optimize some objective?
 
-  try {
-    // If extraction failed on client-side, return error immediately
-    if (!extractionSuccess) {
-      return {
-        fileName,
-        success: false,
-        error: `PDF extraction failed: ${extractionError || 'Unknown error'}`,
-      };
-    }
+(6) Does this paper study machine learning methods in the context of item review and analysis, that is, statistical evaluation of a task/question's reliability, validity, and other characteristics (e.g., relevant behavioral evidence)? Exclude applications in the context of differential item functioning or differential rater functioning analyses.
 
-    // Validate we have text to analyze
-    if (!text || text.trim().length === 0) {
-      return {
-        fileName,
-        success: false,
-        error: 'No text extracted from PDF',
-      };
-    }
+(7) Does this paper study machine learning methods in the context of differential item functioning detection or differential rater functioning detection, that is, flagging subsets of items or raters that function differently across subgroups?
 
-    console.log(`Analyzing ${fileName} (${text.length} characters)...`);
+(8) Does this paper study machine learning methods in the context of aberrant response detection, that is, flagging subsets of examinees whose observed data deviates from normal test-taking (e.g., insufficient effort responding or cheating)?
 
-    // Build the prompt with optional rated aspects
-    let prompt = '';
-    let systemPromptToUse = undefined;
+(9) Does this paper study machine learning methods in the context of process data analysis, that is, analysis of computer-logged, time-stamped sequence of actions performed by an examinee (e.g., clickstreams and keystrokes) in pursuit of solving an item?
 
-    if (useMxmlPrompt) {
-        // MxML mode: Use custom system prompt if provided, otherwise use default
-        if (customSystemPrompt) {
-            // Replace {{RATED_ASPECTS}} placeholder with actual rated aspects
-            systemPromptToUse = customSystemPrompt.replace(
-                '{{RATED_ASPECTS}}',
-                ratedAspects || '[No rated aspects provided]'
-            );
-        } else {
-            // Fall back to hardcoded default MxML prompt
-            systemPromptToUse = `You are a systematic review expert tasked with reviewing a number of published papers according to the rules given below. For each given article, carefully go through all the contents in the file.
+(10) Does this paper study the application of machine learning methods to choosing among candidate models, including the use of regularization to adjust model capacity, or performing variable selection, often based on model-data fit, predictive performance, and simplicity?
+
+(11) Does this paper study the extension to existing measurement or psychometric models with machine learning methods?
+
+(12) Does this paper study the application of machine learning methods to estimating measurement or psychometric model parameters?
+
+(13) Does this paper study machine learning methods in the context of examining measurement validity based on internal structure, that is, to what extent the relationships among test items and test components conform to the construct being measured?
+
+(14) Does this paper study machine learning methods in the context of examining measurement validity based on test content, that is, relationship between the content of a test (e.g., the themes, wording, and format) and the construct being measured?
+
+(15) Does this paper study machine learning methods in the context of examining measurement validity based on relations to other variables, that is, the relationship of test scores to variables external to the test (e.g., predictive validity, concurrent validity, convergent validity, divergent validity)?
+
+(16) Is the main focus of this paper a CONCEPTUAL discussion of the applications of machine learning methods in measurement practice, that is, reviews and non-technical discussions on the role of machine learning in measurement?
+
+(17) Is the main focus of this paper an overview and tutorials of machine learning without referencing specific measurement contexts?`;
+
+export const DEFAULT_MXML_SYSTEM_PROMPT = `You are a systematic review expert tasked with reviewing a number of published papers according to the rules given below. For each given article, carefully go through all the contents in the file.
 
 Find the specifications of (1) the Rated Aspects, (2) the operational definition of Measurement, and (3) the operational definition of Machine Learning (ML).
 
 ---------------------------------------
 Rated Aspects:
 
-${ratedAspects || '[No rated aspects provided]'}
+{{RATED_ASPECTS}}
 
 ---------------------------------------
 IMPORTANT: The following two operational definitions are PROVIDED AS CONTEXT ONLY. They are NOT rated aspects. Do NOT create separate aspect entries for them. Only evaluate the numbered rated aspects listed above.
@@ -199,17 +116,13 @@ Example of a good formatted response for an aspect WITHOUT exclusion criteria:
 (b) The abstract states the paper develops and evaluates machine learning approaches for automatically scoring written essays. The methods section details the implementation of deep learning architectures trained on human-scored essay data.
 
 (c) "This study develops machine learning methods for automated essay scoring, training neural networks on a corpus of human-scored essays..." Located in the Abstract and Methods sections.`;
-        }
 
-        prompt = `Here is the extracted text to analyze:\n\n${text}`;
-    } else {
-        // ICAP mode: Use strict yes/no format matching MxML
-        systemPromptToUse = `You are a systematic review expert tasked with reviewing published papers. For each given article, carefully go through all the contents in the file.
+export const DEFAULT_ICAP_SYSTEM_PROMPT = `You are a systematic review expert tasked with reviewing published papers. For each given article, carefully go through all the contents in the file.
 
 ---------------------------------------
 Rated Aspects:
 
-${ratedAspects || '[No rated aspects provided]'}
+{{RATED_ASPECTS}}
 
 ---------------------------------------
 General instructions:
@@ -238,36 +151,12 @@ Do NOT omit the " - " separator. Do NOT write free-form text without the Yes/No 
 
 CRITICAL: Use "Aspect (1)" with parentheses around the number, NOT "Aspect [1]" with square brackets. The aspect number must be in parentheses.`;
 
-        prompt = `Here is the extracted text to analyze:\n\n${text}`;
-    }
-
-    const analysisResult = await asuAimlClient.query(prompt, {
-      model_provider: 'gcp-deepmind',
-      model_name: 'geminiflash2',
-      model_params: {
-        temperature: 0.7,
-      },
-      systemPrompt: systemPromptToUse // Pass the override if it exists
-    });
-
-    console.log(`Analysis complete for ${fileName}`);
-
-    return {
-      fileName,
-      success: true,
-      data: {
-        extractedText: text,
-        metadata: metadata || {},
-        analysis: analysisResult.response || analysisResult, // Extract just the response text
-      },
-    };
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error(`Error analyzing ${fileName}: ${errorMsg}`, error);
-    return {
-      fileName,
-      success: false,
-      error: `Analysis failed for "${fileName}": ${errorMsg}`,
-    };
-  }
+/**
+ * Build the full system prompt by replacing the {{RATED_ASPECTS}} placeholder
+ */
+export function buildSystemPrompt(
+  template: string,
+  ratedAspects: string
+): string {
+  return template.replace('{{RATED_ASPECTS}}', ratedAspects || '[No rated aspects provided]');
 }
