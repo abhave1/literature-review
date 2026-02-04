@@ -9,10 +9,11 @@ export const runtime = 'nodejs';
  */
 export async function POST(request: NextRequest) {
   try {
-    const token = process.env.BLOB_READ_WRITE_TOKEN;
+    // Use the MXML token for uploading to mxml-pdfs folder
+    const token = process.env.BLOB_MXML_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN;
     if (!token) {
       return NextResponse.json(
-        { error: 'BLOB_READ_WRITE_TOKEN not configured' },
+        { error: 'BLOB_MXML_READ_WRITE_TOKEN not configured' },
         { status: 500 }
       );
     }

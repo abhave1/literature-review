@@ -45,7 +45,7 @@ export async function GET() {
     }
 
     // Fetch the config from blob (with cache bust)
-    const response = await fetch(configBlob.url, { cache: 'no-store' });
+    const response = await fetch(`${configBlob.url}?t=${Date.now()}`, { cache: 'no-store' });
     const savedConfig: SavedPrompt = await response.json();
     console.log('Loaded config:', savedConfig.updatedAt);
 
@@ -72,6 +72,7 @@ export async function GET() {
 /**
  * POST /api/prompt
  * Saves the system prompt and rated aspects to Vercel Blob
+ * Delete old blob first, then write new one (clean overwrite)
  */
 export async function POST(request: NextRequest) {
   try {
@@ -85,24 +86,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Delete any existing prompt blobs first
+    const { blobs } = await list({ prefix: 'config/' });
+    const existing = blobs.filter(b =>
+      b.pathname === PROMPT_BLOB_PATH ||
+      b.pathname.endsWith('mxml-prompt.json')
+    );
+    if (existing.length > 0) {
+      await del(existing.map(b => b.url));
+    }
+
+    // Write fresh
     const configData: SavedPrompt = {
       systemPrompt,
       ratedAspects,
       updatedAt: new Date().toISOString(),
     };
 
-    // Save to Blob (overwrites existing)
     const result = await put(PROMPT_BLOB_PATH, JSON.stringify(configData, null, 2), {
       access: 'public',
       addRandomSuffix: false,
-      allowOverwrite: true,
+      cacheControlMaxAge: 0,
     });
-
-    console.log('Saved prompt to blob:', result.pathname, result.url);
 
     return NextResponse.json({
       success: true,
-      message: 'Prompt saved successfully',
       updatedAt: configData.updatedAt,
       blobUrl: result.url,
     });
