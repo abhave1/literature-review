@@ -7,6 +7,7 @@ import FileUpload from '@/components/FileUpload';
 import DriveFolderPicker, { ConnectionStatus } from '@/components/DriveFolderPicker';
 import DriveSyncButton, { SyncStatus } from '@/components/DriveSyncButton';
 import { useBatchProcessor } from '@/lib/hooks/use-batch-processor';
+import Link from 'next/link';
 import { DEFAULT_MXML_SYSTEM_PROMPT, DEFAULT_ASPECTS } from '@/lib/prompts/default-mxml-prompt';
 
 interface BlobFile {
@@ -416,11 +417,19 @@ export default function MxMLPage() {
              </h1>
              <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">Beta</span>
           </div>
-          <div className="text-sm font-medium text-gray-500">
-            {files.length} Files Available
-            {searchQuery && ` • ${filteredFiles.length} Filtered`}
-            {' • '}
-            <span className="text-indigo-600">{selectedFiles.size} Selected</span>
+          <div className="flex items-center gap-6">
+            <Link
+              href="/screening"
+              className="text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors"
+            >
+              Screening →
+            </Link>
+            <div className="text-sm font-medium text-gray-500">
+              {files.length} Files Available
+              {searchQuery && ` • ${filteredFiles.length} Filtered`}
+              {' • '}
+              <span className="text-indigo-600">{selectedFiles.size} Selected</span>
+            </div>
           </div>
         </div>
       </div>
