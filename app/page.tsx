@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import FileUpload from '@/components/FileUpload';
 import AnalysisResults from '@/components/AnalysisResults';
 import AccessKeyPrompt from '@/components/AccessKeyPrompt';
+import MetadataUpload from '@/components/MetadataUpload';
 import { useBatchProcessor } from '@/lib/hooks/use-batch-processor';
+import { MetadataMap, normalizeFilename } from '@/lib/metadata-parser';
 
 interface AnalysisResult {
   fileName: string;
@@ -49,6 +51,7 @@ export default function Home() {
   const [results, setResults] = useState<ApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ratedAspects, setRatedAspects] = useState<string>('');
+  const [metadata, setMetadata] = useState<MetadataMap | null>(null);
 
   // Blob storage state
   const [blobFiles, setBlobFiles] = useState<BlobFile[]>([]);
@@ -124,6 +127,43 @@ export default function Home() {
   const filteredBlobFiles = blobFiles.filter(file =>
     file.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Compute all selected file names (local + blob) for metadata matching
+  const allSelectedFileNames = useMemo(() => {
+    const localNames = files.map(f => f.name);
+    const blobNames = blobFiles
+      .filter(f => selectedBlobFiles.has(f.url))
+      .map(f => f.name);
+    return [...localNames, ...blobNames];
+  }, [files, blobFiles, selectedBlobFiles]);
+
+  // Compute metadata match preview when both files and metadata exist
+  const matchPreview = useMemo(() => {
+    if (!metadata || allSelectedFileNames.length === 0) return null;
+
+    const metadataKeys = new Set(metadata.keys());
+    const matched: string[] = [];
+    const unmatched: string[] = [];
+
+    for (const name of allSelectedFileNames) {
+      if (metadataKeys.has(normalizeFilename(name))) {
+        matched.push(name);
+      } else {
+        unmatched.push(name);
+      }
+    }
+
+    // Metadata rows that don't correspond to any selected file
+    const selectedNormalized = new Set(allSelectedFileNames.map(normalizeFilename));
+    const extraMetadata: string[] = [];
+    for (const key of metadataKeys) {
+      if (!selectedNormalized.has(key)) {
+        extraMetadata.push(key);
+      }
+    }
+
+    return { matched, unmatched, extraMetadata };
+  }, [metadata, allSelectedFileNames]);
 
   const selectAllBlob = () => {
     if (selectedBlobFiles.size === filteredBlobFiles.length && filteredBlobFiles.length > 0) {
@@ -451,6 +491,86 @@ export default function Home() {
           />
         </div>
 
+        {/* Article Metadata (Optional) */}
+        <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+          <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+            Article Metadata (Optional)
+          </h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Upload a spreadsheet with article metadata (authors, year, journal, etc.) to append to exports.
+            Must contain a &quot;Filename in AI Bot&quot; column matching PDF filenames.
+          </p>
+          <MetadataUpload
+            onMetadataLoaded={setMetadata}
+            metadata={metadata}
+            disabled={processor.isProcessing}
+          />
+        </div>
+
+        {/* Metadata Match Preview */}
+        {matchPreview && (
+          <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+            <h2 className="text-2xl font-semibold text-gray-900 mb-4">
+              Metadata Match Preview
+            </h2>
+
+            {/* Summary Bar */}
+            <div className="flex items-center gap-4 mb-4">
+              <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
+                <div
+                  className="bg-green-500 h-3 rounded-full transition-all duration-300"
+                  style={{ width: `${(matchPreview.matched.length / allSelectedFileNames.length) * 100}%` }}
+                />
+              </div>
+              <span className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                {matchPreview.matched.length} / {allSelectedFileNames.length} matched
+              </span>
+            </div>
+
+            {/* File list */}
+            <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+              {matchPreview.matched.map((name) => (
+                <div key={name} className="flex items-center gap-3 px-4 py-2">
+                  <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-sm text-gray-800 truncate">{name}</span>
+                  <span className="ml-auto text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded flex-shrink-0">matched</span>
+                </div>
+              ))}
+              {matchPreview.unmatched.map((name) => (
+                <div key={name} className="flex items-center gap-3 px-4 py-2 bg-amber-50/50">
+                  <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.999L13.732 4.001c-.77-1.333-2.694-1.333-3.464 0L3.34 16.001C2.57 17.334 3.532 19 5.072 19z" />
+                  </svg>
+                  <span className="text-sm text-gray-800 truncate">{name}</span>
+                  <span className="ml-auto text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded flex-shrink-0">no metadata</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Extra metadata rows not in selected files */}
+            {matchPreview.extraMetadata.length > 0 && (
+              <details className="mt-3">
+                <summary className="text-sm text-gray-500 cursor-pointer hover:text-gray-700">
+                  {matchPreview.extraMetadata.length} metadata row{matchPreview.extraMetadata.length !== 1 ? 's' : ''} with no matching file selected
+                </summary>
+                <div className="mt-2 max-h-32 overflow-y-auto text-sm text-gray-500 space-y-1 pl-2">
+                  {matchPreview.extraMetadata.map((name) => (
+                    <div key={name} className="truncate">{name}</div>
+                  ))}
+                </div>
+              </details>
+            )}
+
+            {matchPreview.unmatched.length === 0 && matchPreview.extraMetadata.length === 0 && (
+              <p className="mt-3 text-sm text-green-700 font-medium">
+                All files have matching metadata.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Upload Section */}
         <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
           <FileUpload onFilesSelected={handleFilesSelected} isProcessing={processor.isProcessing} />
@@ -588,6 +708,7 @@ export default function Home() {
               successCount={results.successCount}
               failureCount={results.failureCount}
               ratedAspects={ratedAspects}
+              metadata={metadata}
             />
           </div>
         )}

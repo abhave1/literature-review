@@ -5,6 +5,7 @@
 
 import * as XLSX from 'xlsx';
 import { parseAspects, ParsedAnalysis, parseRatedAspects, AspectDefinition } from './aspect-parser';
+import { MetadataMap, normalizeFilename, getMetadataColumnHeaders } from './metadata-parser';
 
 interface AnalysisResult {
   fileName: string;
@@ -23,7 +24,7 @@ interface AnalysisResult {
  * @param results - Analysis results from the API
  * @param ratedAspects - Original rated aspects text from the prompt (used for fixed column headers)
  */
-export function exportToExcel(results: AnalysisResult[], ratedAspects?: string): void {
+export function exportToExcel(results: AnalysisResult[], ratedAspects?: string, metadata?: MetadataMap): void {
   // Parse the rated aspects from the prompt to get fixed column headers
   const aspectDefinitions = ratedAspects ? parseRatedAspects(ratedAspects) : [];
   const useFixedColumns = aspectDefinitions.length > 0;
@@ -112,16 +113,35 @@ export function exportToExcel(results: AnalysisResult[], ratedAspects?: string):
       }
     }
 
+    // Append metadata columns if available
+    if (metadata) {
+      const meta = metadata.get(normalizeFilename(fileName));
+      const metaHeaders = getMetadataColumnHeaders();
+      const metaKeys: (keyof import('./metadata-parser').MetadataRow)[] = [
+        'authors', 'year', 'title', 'journal', 'volume', 'issue',
+        'pages', 'doi', 'abstract', 'keywords', 'documentType', 'language', 'database',
+      ];
+      for (let i = 0; i < metaHeaders.length; i++) {
+        row[metaHeaders[i]] = meta ? meta[metaKeys[i]] as string : '';
+      }
+    }
+
     rows.push(row);
   }
 
   // Create worksheet
   const worksheet = XLSX.utils.json_to_sheet(rows);
 
-  // Set column widths (FileName + aspect columns)
+  // Set column widths (FileName + aspect columns + metadata columns)
   const colWidths = [{ wch: 30 }]; // File Name column
   for (let i = 0; i < aspectColumns.length; i++) {
     colWidths.push({ wch: 80 }); // Wider columns for combined content
+  }
+  if (metadata) {
+    const metaWidths = [20, 8, 40, 30, 8, 8, 12, 25, 60, 30, 15, 10, 15];
+    for (const w of metaWidths) {
+      colWidths.push({ wch: w });
+    }
   }
   worksheet['!cols'] = colWidths;
 
@@ -142,7 +162,7 @@ export function exportToExcel(results: AnalysisResult[], ratedAspects?: string):
  * @param results - Analysis results from the API
  * @param ratedAspects - Original rated aspects text from the prompt (used for fixed column headers)
  */
-export function exportToCSV(results: AnalysisResult[], ratedAspects?: string): void {
+export function exportToCSV(results: AnalysisResult[], ratedAspects?: string, metadata?: MetadataMap): void {
   // Parse the rated aspects from the prompt to get fixed column headers
   const aspectDefinitions = ratedAspects ? parseRatedAspects(ratedAspects) : [];
   const useFixedColumns = aspectDefinitions.length > 0;
@@ -228,6 +248,19 @@ export function exportToCSV(results: AnalysisResult[], ratedAspects?: string): v
       // Add columns using the fixed aspect titles, matched by number
       for (const col of aspectColumns) {
         row[col.title] = aspectByNumber.get(col.number) || '';
+      }
+    }
+
+    // Append metadata columns if available
+    if (metadata) {
+      const meta = metadata.get(normalizeFilename(fileName));
+      const metaHeaders = getMetadataColumnHeaders();
+      const metaKeys: (keyof import('./metadata-parser').MetadataRow)[] = [
+        'authors', 'year', 'title', 'journal', 'volume', 'issue',
+        'pages', 'doi', 'abstract', 'keywords', 'documentType', 'language', 'database',
+      ];
+      for (let i = 0; i < metaHeaders.length; i++) {
+        row[metaHeaders[i]] = meta ? meta[metaKeys[i]] as string : '';
       }
     }
 
@@ -282,7 +315,7 @@ function filterBeforeDash(text: string): string {
  * @param results - Analysis results from the API
  * @param ratedAspects - Original rated aspects text from the prompt (used for fixed column headers)
  */
-export function exportFilteredToExcel(results: AnalysisResult[], ratedAspects?: string): void {
+export function exportFilteredToExcel(results: AnalysisResult[], ratedAspects?: string, metadata?: MetadataMap): void {
   // Parse the rated aspects from the prompt to get fixed column headers
   const aspectDefinitions = ratedAspects ? parseRatedAspects(ratedAspects) : [];
   const useFixedColumns = aspectDefinitions.length > 0;
@@ -360,16 +393,35 @@ export function exportFilteredToExcel(results: AnalysisResult[], ratedAspects?: 
       }
     }
 
+    // Append metadata columns if available
+    if (metadata) {
+      const meta = metadata.get(normalizeFilename(fileName));
+      const metaHeaders = getMetadataColumnHeaders();
+      const metaKeys: (keyof import('./metadata-parser').MetadataRow)[] = [
+        'authors', 'year', 'title', 'journal', 'volume', 'issue',
+        'pages', 'doi', 'abstract', 'keywords', 'documentType', 'language', 'database',
+      ];
+      for (let i = 0; i < metaHeaders.length; i++) {
+        row[metaHeaders[i]] = meta ? meta[metaKeys[i]] as string : '';
+      }
+    }
+
     rows.push(row);
   }
 
   // Create worksheet
   const worksheet = XLSX.utils.json_to_sheet(rows);
 
-  // Set column widths (FileName + aspect columns)
+  // Set column widths (FileName + aspect columns + metadata columns)
   const colWidths = [{ wch: 30 }]; // File Name column
   for (let i = 0; i < aspectColumns.length; i++) {
     colWidths.push({ wch: 50 }); // Narrower columns since content is shorter
+  }
+  if (metadata) {
+    const metaWidths = [20, 8, 40, 30, 8, 8, 12, 25, 60, 30, 15, 10, 15];
+    for (const w of metaWidths) {
+      colWidths.push({ wch: w });
+    }
   }
   worksheet['!cols'] = colWidths;
 

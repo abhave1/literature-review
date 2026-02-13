@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { exportToExcel, exportFilteredToExcel, exportToCSV, getExportStats } from '@/lib/excel-exporter';
+import { MetadataMap, detectMismatches } from '@/lib/metadata-parser';
 
 interface AnalysisResult {
   fileName: string;
@@ -21,6 +22,7 @@ interface AnalysisResultsProps {
   successCount: number;
   failureCount: number;
   ratedAspects?: string;
+  metadata?: MetadataMap | null;
 }
 
 export default function AnalysisResults({
@@ -29,6 +31,7 @@ export default function AnalysisResults({
   successCount,
   failureCount,
   ratedAspects,
+  metadata,
 }: AnalysisResultsProps) {
   const [openIndexes, setOpenIndexes] = useState<Set<number>>(new Set());
 
@@ -56,16 +59,21 @@ export default function AnalysisResults({
   };
 
   const handleExportExcel = () => {
-    exportToExcel(results, ratedAspects);
+    exportToExcel(results, ratedAspects, metadata || undefined);
   };
 
   const handleExportFilteredExcel = () => {
-    exportFilteredToExcel(results, ratedAspects);
+    exportFilteredToExcel(results, ratedAspects, metadata || undefined);
   };
 
   const handleExportCSV = () => {
-    exportToCSV(results, ratedAspects);
+    exportToCSV(results, ratedAspects, metadata || undefined);
   };
+
+  // Compute mismatch info when metadata is provided
+  const mismatch = metadata
+    ? detectMismatches(results.map(r => r.fileName), metadata)
+    : null;
 
   const stats = getExportStats(results);
 
@@ -170,6 +178,49 @@ export default function AnalysisResults({
             Download JSON
           </button>
         </div>
+
+        {/* Metadata Match Info */}
+        {mismatch && (
+          <div className="mt-4">
+            <p className="text-sm text-green-700 font-medium">
+              Metadata matched: {mismatch.matchedCount} of {results.length} files
+            </p>
+
+            {(mismatch.filesNotInMetadata.length > 0 || mismatch.metadataNotInFiles.length > 0) && (
+              <details className="mt-2">
+                <summary className="text-sm text-amber-700 cursor-pointer hover:text-amber-800 font-medium">
+                  {mismatch.filesNotInMetadata.length + mismatch.metadataNotInFiles.length} mismatch{mismatch.filesNotInMetadata.length + mismatch.metadataNotInFiles.length !== 1 ? 'es' : ''} detected
+                </summary>
+                <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm space-y-3">
+                  {mismatch.filesNotInMetadata.length > 0 && (
+                    <div>
+                      <p className="font-medium text-amber-800">
+                        Analysis files not found in metadata ({mismatch.filesNotInMetadata.length}):
+                      </p>
+                      <ul className="mt-1 list-disc list-inside text-amber-700">
+                        {mismatch.filesNotInMetadata.map((f, i) => (
+                          <li key={i} className="truncate">{f}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {mismatch.metadataNotInFiles.length > 0 && (
+                    <div>
+                      <p className="font-medium text-amber-800">
+                        Metadata rows not in analysis results ({mismatch.metadataNotInFiles.length}):
+                      </p>
+                      <ul className="mt-1 list-disc list-inside text-amber-700 max-h-32 overflow-y-auto">
+                        {mismatch.metadataNotInFiles.map((f, i) => (
+                          <li key={i} className="truncate">{f}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </details>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="space-y-4">
