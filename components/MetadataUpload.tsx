@@ -5,7 +5,7 @@ import { useDropzone } from 'react-dropzone';
 import { parseMetadataFile, MetadataMap } from '@/lib/metadata-parser';
 
 interface MetadataUploadProps {
-  onMetadataLoaded: (metadata: MetadataMap | null) => void;
+  onMetadataLoaded: (metadata: MetadataMap | null, metadataHeaders?: string[]) => void;
   metadata: MetadataMap | null;
   disabled?: boolean;
 }
@@ -34,13 +34,17 @@ export default function MetadataUpload({
         setFileName(file.name);
         setRowCount(result.rowCount);
         setFilenameColumn(result.filenameColumn);
-        onMetadataLoaded(result.metadata);
+        // Pass non-filename headers so exports match the spreadsheet columns
+        const nonFilenameHeaders = result.headers.filter(
+          h => h.toLowerCase().trim() !== result.filenameColumn.toLowerCase().trim()
+        );
+        onMetadataLoaded(result.metadata, nonFilenameHeaders);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to parse file');
         setFileName(null);
         setRowCount(0);
         setFilenameColumn('');
-        onMetadataLoaded(null);
+        onMetadataLoaded(null, undefined);
       } finally {
         setIsLoading(false);
       }
@@ -65,7 +69,7 @@ export default function MetadataUpload({
     setRowCount(0);
     setFilenameColumn('');
     setError(null);
-    onMetadataLoaded(null);
+    onMetadataLoaded(null, undefined);
   };
 
   return (

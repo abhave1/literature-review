@@ -23,6 +23,7 @@ interface AnalysisResultsProps {
   failureCount: number;
   ratedAspects?: string;
   metadata?: MetadataMap | null;
+  metadataHeaders?: string[];
 }
 
 export default function AnalysisResults({
@@ -32,6 +33,7 @@ export default function AnalysisResults({
   failureCount,
   ratedAspects,
   metadata,
+  metadataHeaders,
 }: AnalysisResultsProps) {
   const [openIndexes, setOpenIndexes] = useState<Set<number>>(new Set());
 
@@ -59,15 +61,15 @@ export default function AnalysisResults({
   };
 
   const handleExportExcel = () => {
-    exportToExcel(results, ratedAspects, metadata || undefined);
+    exportToExcel(results, ratedAspects, metadata || undefined, metadataHeaders);
   };
 
   const handleExportFilteredExcel = () => {
-    exportFilteredToExcel(results, ratedAspects, metadata || undefined);
+    exportFilteredToExcel(results, ratedAspects, metadata || undefined, metadataHeaders);
   };
 
   const handleExportCSV = () => {
-    exportToCSV(results, ratedAspects, metadata || undefined);
+    exportToCSV(results, ratedAspects, metadata || undefined, metadataHeaders);
   };
 
   // Compute mismatch info when metadata is provided

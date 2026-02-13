@@ -52,6 +52,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [ratedAspects, setRatedAspects] = useState<string>('');
   const [metadata, setMetadata] = useState<MetadataMap | null>(null);
+  const [metadataHeaders, setMetadataHeaders] = useState<string[]>([]);
 
   // Blob storage state
   const [blobFiles, setBlobFiles] = useState<BlobFile[]>([]);
@@ -501,7 +502,10 @@ export default function Home() {
             Must contain a &quot;Filename in AI Bot&quot; column matching PDF filenames.
           </p>
           <MetadataUpload
-            onMetadataLoaded={setMetadata}
+            onMetadataLoaded={(meta, headers) => {
+              setMetadata(meta);
+              setMetadataHeaders(headers || []);
+            }}
             metadata={metadata}
             disabled={processor.isProcessing}
           />
@@ -709,6 +713,7 @@ export default function Home() {
               failureCount={results.failureCount}
               ratedAspects={ratedAspects}
               metadata={metadata}
+              metadataHeaders={metadataHeaders}
             />
           </div>
         )}
