@@ -219,10 +219,11 @@ export interface BatchArticleInput {
 }
 
 /**
- * Build the system prompt for batch screening (returns JSON)
+ * Default screening prompt template with placeholders for rubric content.
+ * Placeholders: {{DEFINITIONS}}, {{INCLUSION_RULES}}, {{EXCLUSION_RULES}},
+ * {{SPECIAL_RULES}}, {{PSYCHOMETRICIAN_JOBS}}, {{ML_TERMS}}
  */
-export function buildBatchScreeningSystemPrompt(rubrics: ScreeningRubrics): string {
-  return `You are a systematic review expert. You will screen multiple studies based on their Title, Abstract, Year, and Journal.
+export const DEFAULT_SCREENING_PROMPT_TEMPLATE = `You are a systematic review expert. You will screen multiple studies based on their Title, Abstract, Year, and Journal.
 
 For EACH study, follow these steps:
 - Step 1: Label as "NoAbstract" if abstract is missing/empty. Otherwise, continue.
@@ -230,22 +231,22 @@ For EACH study, follow these steps:
 - Step 3: For included studies, check Special Rules for Exclusion - exclude if any applies.
 - Step 4: For excluded studies, identify which Exclusion Rule(s) apply.
 
-${rubrics.definitions}
+{{DEFINITIONS}}
 
 === INCLUSION RULES ===
-${rubrics.inclusionRules}
+{{INCLUSION_RULES}}
 
 === EXCLUSION RULES ===
-${rubrics.exclusionRules}
+{{EXCLUSION_RULES}}
 
 === SPECIAL RULES FOR EXCLUSION ===
-${rubrics.specialRules}
+{{SPECIAL_RULES}}
 
 === PSYCHOMETRICIAN'S JOB LIST ===
-${rubrics.psychometricianJobs}
+{{PSYCHOMETRICIAN_JOBS}}
 
 === ML TERMS ===
-${rubrics.mlTerms}
+{{ML_TERMS}}
 
 === OUTPUT FORMAT ===
 You MUST respond with valid JSON only. No markdown, no explanation outside JSON.
@@ -268,6 +269,25 @@ CRITICAL RULES:
 3. "rules_used" should list rule prefixes (RI1, RE2, etc.) or "No RI applied" or "NoAbstract"
 4. Keep explanations brief but informative
 5. Output ONLY valid JSON, nothing else`;
+
+/**
+ * Build a screening system prompt by replacing template placeholders with rubric content.
+ */
+export function buildScreeningPromptFromTemplate(template: string, rubrics: ScreeningRubrics): string {
+  return template
+    .replace('{{DEFINITIONS}}', rubrics.definitions)
+    .replace('{{INCLUSION_RULES}}', rubrics.inclusionRules)
+    .replace('{{EXCLUSION_RULES}}', rubrics.exclusionRules)
+    .replace('{{SPECIAL_RULES}}', rubrics.specialRules)
+    .replace('{{PSYCHOMETRICIAN_JOBS}}', rubrics.psychometricianJobs)
+    .replace('{{ML_TERMS}}', rubrics.mlTerms);
+}
+
+/**
+ * Build the system prompt for batch screening (returns JSON)
+ */
+export function buildBatchScreeningSystemPrompt(rubrics: ScreeningRubrics): string {
+  return buildScreeningPromptFromTemplate(DEFAULT_SCREENING_PROMPT_TEMPLATE, rubrics);
 }
 
 /**

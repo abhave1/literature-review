@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { put, list, del } from '@vercel/blob';
 import {
   DEFAULT_RUBRICS,
+  DEFAULT_SCREENING_PROMPT_TEMPLATE,
   type ScreeningRubrics,
 } from '@/lib/screening/default-rubrics';
 
@@ -13,6 +14,7 @@ const RUBRIC_BLOB_PATH = 'config/screening-rubrics.json';
 
 export interface SavedRubrics {
   rubrics: ScreeningRubrics;
+  promptTemplate?: string;
   updatedAt: string;
 }
 
@@ -38,6 +40,7 @@ export async function GET() {
       return NextResponse.json(
         {
           rubrics: DEFAULT_RUBRICS,
+          promptTemplate: DEFAULT_SCREENING_PROMPT_TEMPLATE,
           isDefault: true,
         },
         {
@@ -55,6 +58,7 @@ export async function GET() {
     return NextResponse.json(
       {
         rubrics: savedConfig.rubrics || DEFAULT_RUBRICS,
+        promptTemplate: savedConfig.promptTemplate || DEFAULT_SCREENING_PROMPT_TEMPLATE,
         isDefault: false,
         updatedAt: savedConfig.updatedAt,
       },
@@ -67,6 +71,7 @@ export async function GET() {
     // Return defaults on error
     return NextResponse.json({
       rubrics: DEFAULT_RUBRICS,
+      promptTemplate: DEFAULT_SCREENING_PROMPT_TEMPLATE,
       isDefault: true,
       error: 'Failed to load from storage, using defaults',
     });
@@ -80,7 +85,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { rubrics } = body as { rubrics: ScreeningRubrics };
+    const { rubrics, promptTemplate } = body as { rubrics: ScreeningRubrics; promptTemplate?: string };
 
     if (!rubrics || typeof rubrics !== 'object') {
       return NextResponse.json(
@@ -119,6 +124,7 @@ export async function POST(request: NextRequest) {
     // Write fresh
     const configData: SavedRubrics = {
       rubrics,
+      ...(promptTemplate !== undefined && { promptTemplate }),
       updatedAt: new Date().toISOString(),
     };
 

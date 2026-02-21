@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { asuAimlClient } from '@/lib/asu-aiml-client';
 import {
   buildBatchScreeningSystemPrompt,
+  buildScreeningPromptFromTemplate,
   buildBatchArticlesPrompt,
   type ScreeningRubrics,
   type BatchArticleInput,
@@ -25,6 +26,7 @@ interface BatchScreeningRequest {
     journal: string;
   }[];
   rubrics: ScreeningRubrics;
+  promptTemplate?: string;
 }
 
 interface BatchScreeningResponse {
@@ -42,7 +44,7 @@ interface BatchScreeningResponse {
 export async function POST(request: NextRequest): Promise<NextResponse<BatchScreeningResponse>> {
   try {
     const body: BatchScreeningRequest = await request.json();
-    const { articles, rubrics } = body;
+    const { articles, rubrics, promptTemplate } = body;
 
     if (!articles || !Array.isArray(articles) || articles.length === 0) {
       return NextResponse.json(
@@ -98,7 +100,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<BatchScre
     }
 
     // Build prompts for articles with abstracts
-    const systemPrompt = buildBatchScreeningSystemPrompt(rubrics);
+    const systemPrompt = promptTemplate
+      ? buildScreeningPromptFromTemplate(promptTemplate, rubrics)
+      : buildBatchScreeningSystemPrompt(rubrics);
     const userPrompt = buildBatchArticlesPrompt(articlesWithAbstract);
 
     // Call the LLM

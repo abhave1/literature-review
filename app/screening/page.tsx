@@ -11,7 +11,7 @@ import ResumeDialog from '@/components/screening/ResumeDialog';
 
 import { parseCSV, mapToArticleRows, validateColumnMapping, type ArticleRow, type ParsedCSV } from '@/lib/screening/csv-parser';
 import { detectFormat, type ColumnMapping } from '@/lib/screening/column-detector';
-import { DEFAULT_RUBRICS, type ScreeningRubrics } from '@/lib/screening/default-rubrics';
+import { DEFAULT_RUBRICS, DEFAULT_SCREENING_PROMPT_TEMPLATE, type ScreeningRubrics } from '@/lib/screening/default-rubrics';
 import { type ScreeningResult } from '@/lib/screening/response-parser';
 import { getCheckpointManager, type CheckpointInfo } from '@/lib/screening/checkpoint-manager';
 
@@ -38,6 +38,12 @@ export default function ScreeningPage() {
   const [rubricIsDefault, setRubricIsDefault] = useState(true);
   const [isSavingRubric, setIsSavingRubric] = useState(false);
   const [rubricSaveStatus, setRubricSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
+
+  // Prompt template state
+  const [promptTemplate, setPromptTemplate] = useState<string>(DEFAULT_SCREENING_PROMPT_TEMPLATE);
+  const [promptIsDefault, setPromptIsDefault] = useState(true);
+  const [isSavingPrompt, setIsSavingPrompt] = useState(false);
+  const [promptSaveStatus, setPromptSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
 
   // Processing state
   const [isProcessing, setIsProcessing] = useState(false);
@@ -92,7 +98,7 @@ export default function ScreeningPage() {
     }
   }, [isAuthenticated]);
 
-  // Load saved rubrics from API
+  // Load saved rubrics and prompt template from API
   const loadRubrics = async () => {
     try {
       const res = await fetch('/api/screening-rubric');
@@ -100,6 +106,10 @@ export default function ScreeningPage() {
       if (data.rubrics) {
         setRubrics(data.rubrics);
         setRubricIsDefault(data.isDefault);
+      }
+      if (data.promptTemplate) {
+        setPromptTemplate(data.promptTemplate);
+        setPromptIsDefault(data.promptTemplate === DEFAULT_SCREENING_PROMPT_TEMPLATE || data.isDefault);
       }
     } catch (err) {
       console.error('Failed to load rubrics:', err);
@@ -119,7 +129,7 @@ export default function ScreeningPage() {
     }
   };
 
-  // Save rubrics
+  // Save rubrics (also persists current prompt template)
   const saveRubrics = async () => {
     setIsSavingRubric(true);
     setRubricSaveStatus('idle');
@@ -127,7 +137,7 @@ export default function ScreeningPage() {
       const res = await fetch('/api/screening-rubric', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rubrics }),
+        body: JSON.stringify({ rubrics, promptTemplate }),
       });
       if (!res.ok) throw new Error('Failed to save');
       setRubricSaveStatus('saved');
@@ -149,9 +159,39 @@ export default function ScreeningPage() {
       await fetch('/api/screening-rubric', { method: 'DELETE' });
       setRubrics(DEFAULT_RUBRICS);
       setRubricIsDefault(true);
+      setPromptTemplate(DEFAULT_SCREENING_PROMPT_TEMPLATE);
+      setPromptIsDefault(true);
     } catch (err) {
       console.error('Failed to reset rubrics:', err);
     }
+  };
+
+  // Save prompt template
+  const savePrompt = async () => {
+    setIsSavingPrompt(true);
+    setPromptSaveStatus('idle');
+    try {
+      const res = await fetch('/api/screening-rubric', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rubrics, promptTemplate }),
+      });
+      if (!res.ok) throw new Error('Failed to save');
+      setPromptSaveStatus('saved');
+      setPromptIsDefault(false);
+      setTimeout(() => setPromptSaveStatus('idle'), 3000);
+    } catch (err) {
+      setPromptSaveStatus('error');
+    } finally {
+      setIsSavingPrompt(false);
+    }
+  };
+
+  // Reset prompt template to default
+  const resetPrompt = () => {
+    if (!confirm('Reset system prompt template to default?')) return;
+    setPromptTemplate(DEFAULT_SCREENING_PROMPT_TEMPLATE);
+    setPromptIsDefault(true);
   };
 
   // Handle CSV file selection
@@ -210,6 +250,7 @@ export default function ScreeningPage() {
           journal: a.journal,
         })),
         rubrics,
+        promptTemplate,
       }),
     });
 
@@ -581,7 +622,7 @@ export default function ScreeningPage() {
           )}
         </section>
 
-        {/* Section 1.5: System Prompt Preview */}
+        {/* Section 1.5: System Prompt Editor */}
         <section className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div
             className="px-6 py-4 cursor-pointer hover:bg-gray-50 transition-colors"
@@ -591,72 +632,73 @@ export default function ScreeningPage() {
               <div>
                 <h2 className="text-lg font-semibold text-black">System Prompt</h2>
                 <p className="text-sm text-gray-600 mt-1">
-                  View the prompt template sent to the AI for screening
+                  Edit the prompt template sent to the AI for screening
                 </p>
               </div>
-              <svg
-                className={`w-5 h-5 text-gray-500 transition-transform ${showSystemPrompt ? 'rotate-180' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
+              <div className="flex items-center gap-3">
+                {!promptIsDefault && (
+                  <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded">
+                    Customized
+                  </span>
+                )}
+                <svg
+                  className={`w-5 h-5 text-gray-500 transition-transform ${showSystemPrompt ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
             </div>
           </div>
           {showSystemPrompt && (
-            <div className="px-6 pb-6 border-t border-gray-200 pt-4">
-              <pre className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-800 whitespace-pre-wrap font-mono leading-relaxed overflow-x-auto max-h-[600px] overflow-y-auto">
-{`You are a systematic review expert. You will screen multiple studies based on their Title, Abstract, Year, and Journal.
-
-For EACH study, follow these steps:
-- Step 1: Label as "NoAbstract" if abstract is missing/empty. Otherwise, continue.
-- Step 2: Include if it meets ANY Inclusion Rule. Record ALL matching rules.
-- Step 3: For included studies, check Special Rules for Exclusion - exclude if any applies.
-- Step 4: For excluded studies, identify which Exclusion Rule(s) apply.
-
-{DEFINITIONS}
-
-=== INCLUSION RULES ===
-{INCLUSION_RULES}
-
-=== EXCLUSION RULES ===
-{EXCLUSION_RULES}
-
-=== SPECIAL RULES FOR EXCLUSION ===
-{SPECIAL_RULES}
-
-=== PSYCHOMETRICIAN'S JOB LIST ===
-{PSYCHOMETRICIAN_JOBS}
-
-=== ML TERMS ===
-{ML_TERMS}
-
-=== OUTPUT FORMAT ===
-You MUST respond with valid JSON only. No markdown, no explanation outside JSON.
-Return an array of screening results, one for each article in the exact order provided.
-
-{
-  "results": [
-    {
-      "index": 0,
-      "decision": "Include|Exclude|NoAbstract",
-      "rules_used": "RI1, RI3 or RE2, RE4 or NoAbstract or No RI applied",
-      "explanation": "Brief 1-2 sentence rationale"
-    }
-  ]
-}
-
-CRITICAL RULES:
-1. Return EXACTLY one result per article, in the same order as input
-2. "decision" must be exactly "Include", "Exclude", or "NoAbstract"
-3. "rules_used" should list rule prefixes (RI1, RE2, etc.) or "No RI applied" or "NoAbstract"
-4. Keep explanations brief but informative
-5. Output ONLY valid JSON, nothing else`}
-              </pre>
-              <p className="text-xs text-gray-500 mt-3">
-                Placeholders like {'{DEFINITIONS}'}, {'{INCLUSION_RULES}'}, etc. are replaced with your rubric content at runtime.
-              </p>
+            <div className="px-6 pb-6 border-t border-gray-200 pt-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-500">
+                  Use placeholders: {'{{DEFINITIONS}}'}, {'{{INCLUSION_RULES}}'}, {'{{EXCLUSION_RULES}}'}, {'{{SPECIAL_RULES}}'}, {'{{PSYCHOMETRICIAN_JOBS}}'}, {'{{ML_TERMS}}'}. These are replaced with rubric content at runtime.
+                </p>
+                <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                  {promptSaveStatus === 'saved' && (
+                    <span className="text-xs text-green-600 font-medium">Saved!</span>
+                  )}
+                  {promptSaveStatus === 'error' && (
+                    <span className="text-xs text-red-600 font-medium">Save failed</span>
+                  )}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); resetPrompt(); }}
+                    disabled={promptIsDefault || isProcessing}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                      promptIsDefault || isProcessing
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Reset
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); savePrompt(); }}
+                    disabled={isSavingPrompt || isProcessing}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                      isSavingPrompt || isProcessing
+                        ? 'bg-blue-300 text-white cursor-not-allowed'
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                  >
+                    {isSavingPrompt ? 'Saving...' : 'Save'}
+                  </button>
+                </div>
+              </div>
+              <textarea
+                value={promptTemplate}
+                onChange={(e) => {
+                  setPromptTemplate(e.target.value);
+                  setPromptIsDefault(e.target.value === DEFAULT_SCREENING_PROMPT_TEMPLATE);
+                }}
+                disabled={isProcessing}
+                className="w-full bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-800 font-mono leading-relaxed resize-y min-h-[300px] max-h-[600px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                spellCheck={false}
+              />
             </div>
           )}
         </section>
