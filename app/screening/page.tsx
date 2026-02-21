@@ -52,6 +52,7 @@ export default function ScreeningPage() {
 
   // UI state
   const [showRubricEditor, setShowRubricEditor] = useState(false);
+  const [showSystemPrompt, setShowSystemPrompt] = useState(false);
 
   // Refs
   const processingRef = useRef(false);
@@ -576,6 +577,86 @@ export default function ScreeningPage() {
                 saveStatus={rubricSaveStatus}
                 disabled={isProcessing}
               />
+            </div>
+          )}
+        </section>
+
+        {/* Section 1.5: System Prompt Preview */}
+        <section className="bg-white rounded-xl shadow-sm border border-gray-200">
+          <div
+            className="px-6 py-4 cursor-pointer hover:bg-gray-50 transition-colors"
+            onClick={() => setShowSystemPrompt(!showSystemPrompt)}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-black">System Prompt</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  View the prompt template sent to the AI for screening
+                </p>
+              </div>
+              <svg
+                className={`w-5 h-5 text-gray-500 transition-transform ${showSystemPrompt ? 'rotate-180' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
+          {showSystemPrompt && (
+            <div className="px-6 pb-6 border-t border-gray-200 pt-4">
+              <pre className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-800 whitespace-pre-wrap font-mono leading-relaxed overflow-x-auto max-h-[600px] overflow-y-auto">
+{`You are a systematic review expert. You will screen multiple studies based on their Title, Abstract, Year, and Journal.
+
+For EACH study, follow these steps:
+- Step 1: Label as "NoAbstract" if abstract is missing/empty. Otherwise, continue.
+- Step 2: Include if it meets ANY Inclusion Rule. Record ALL matching rules.
+- Step 3: For included studies, check Special Rules for Exclusion - exclude if any applies.
+- Step 4: For excluded studies, identify which Exclusion Rule(s) apply.
+
+{DEFINITIONS}
+
+=== INCLUSION RULES ===
+{INCLUSION_RULES}
+
+=== EXCLUSION RULES ===
+{EXCLUSION_RULES}
+
+=== SPECIAL RULES FOR EXCLUSION ===
+{SPECIAL_RULES}
+
+=== PSYCHOMETRICIAN'S JOB LIST ===
+{PSYCHOMETRICIAN_JOBS}
+
+=== ML TERMS ===
+{ML_TERMS}
+
+=== OUTPUT FORMAT ===
+You MUST respond with valid JSON only. No markdown, no explanation outside JSON.
+Return an array of screening results, one for each article in the exact order provided.
+
+{
+  "results": [
+    {
+      "index": 0,
+      "decision": "Include|Exclude|NoAbstract",
+      "rules_used": "RI1, RI3 or RE2, RE4 or NoAbstract or No RI applied",
+      "explanation": "Brief 1-2 sentence rationale"
+    }
+  ]
+}
+
+CRITICAL RULES:
+1. Return EXACTLY one result per article, in the same order as input
+2. "decision" must be exactly "Include", "Exclude", or "NoAbstract"
+3. "rules_used" should list rule prefixes (RI1, RE2, etc.) or "No RI applied" or "NoAbstract"
+4. Keep explanations brief but informative
+5. Output ONLY valid JSON, nothing else`}
+              </pre>
+              <p className="text-xs text-gray-500 mt-3">
+                Placeholders like {'{DEFINITIONS}'}, {'{INCLUSION_RULES}'}, etc. are replaced with your rubric content at runtime.
+              </p>
             </div>
           )}
         </section>

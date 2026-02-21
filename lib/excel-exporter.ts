@@ -5,7 +5,7 @@
 
 import * as XLSX from 'xlsx';
 import { parseAspects, ParsedAnalysis, parseRatedAspects, AspectDefinition } from './aspect-parser';
-import { MetadataMap, normalizeFilename, getMetadataColumnHeaders } from './metadata-parser';
+import { MetadataMap, normalizeFilename } from './metadata-parser';
 
 interface AnalysisResult {
   fileName: string;
@@ -114,23 +114,10 @@ export function exportToExcel(results: AnalysisResult[], ratedAspects?: string, 
     }
 
     // Append metadata columns if available
-    if (metadata) {
+    if (metadata && metadataHeaders && metadataHeaders.length > 0) {
       const meta = metadata.get(normalizeFilename(fileName));
-      if (metadataHeaders && metadataHeaders.length > 0) {
-        // Use actual spreadsheet column headers with originalColumns
-        for (const header of metadataHeaders) {
-          row[header] = meta ? (meta.originalColumns[header] || '') : '';
-        }
-      } else {
-        // Fallback to hardcoded columns for backwards compatibility
-        const metaHeaders = getMetadataColumnHeaders();
-        const metaKeys: (keyof import('./metadata-parser').MetadataRow)[] = [
-          'authors', 'year', 'title', 'journal', 'volume', 'issue',
-          'pages', 'doi', 'abstract', 'keywords', 'documentType', 'language', 'database',
-        ];
-        for (let i = 0; i < metaHeaders.length; i++) {
-          row[metaHeaders[i]] = meta ? meta[metaKeys[i]] as string : '';
-        }
+      for (const header of metadataHeaders) {
+        row[header] = meta ? (meta.originalColumns[header] || '') : '';
       }
     }
 
@@ -145,8 +132,8 @@ export function exportToExcel(results: AnalysisResult[], ratedAspects?: string, 
   for (let i = 0; i < aspectColumns.length; i++) {
     colWidths.push({ wch: 80 }); // Wider columns for combined content
   }
-  if (metadata) {
-    const activeHeaders = (metadataHeaders && metadataHeaders.length > 0) ? metadataHeaders : getMetadataColumnHeaders();
+  if (metadata && metadataHeaders && metadataHeaders.length > 0) {
+    const activeHeaders = metadataHeaders;
     for (const header of activeHeaders) {
       // Use wider columns for content-heavy fields
       const lower = header.toLowerCase();
@@ -270,21 +257,10 @@ export function exportToCSV(results: AnalysisResult[], ratedAspects?: string, me
     }
 
     // Append metadata columns if available
-    if (metadata) {
+    if (metadata && metadataHeaders && metadataHeaders.length > 0) {
       const meta = metadata.get(normalizeFilename(fileName));
-      if (metadataHeaders && metadataHeaders.length > 0) {
-        for (const header of metadataHeaders) {
-          row[header] = meta ? (meta.originalColumns[header] || '') : '';
-        }
-      } else {
-        const metaHeaders = getMetadataColumnHeaders();
-        const metaKeys: (keyof import('./metadata-parser').MetadataRow)[] = [
-          'authors', 'year', 'title', 'journal', 'volume', 'issue',
-          'pages', 'doi', 'abstract', 'keywords', 'documentType', 'language', 'database',
-        ];
-        for (let i = 0; i < metaHeaders.length; i++) {
-          row[metaHeaders[i]] = meta ? meta[metaKeys[i]] as string : '';
-        }
+      for (const header of metadataHeaders) {
+        row[header] = meta ? (meta.originalColumns[header] || '') : '';
       }
     }
 
@@ -418,21 +394,10 @@ export function exportFilteredToExcel(results: AnalysisResult[], ratedAspects?: 
     }
 
     // Append metadata columns if available
-    if (metadata) {
+    if (metadata && metadataHeaders && metadataHeaders.length > 0) {
       const meta = metadata.get(normalizeFilename(fileName));
-      if (metadataHeaders && metadataHeaders.length > 0) {
-        for (const header of metadataHeaders) {
-          row[header] = meta ? (meta.originalColumns[header] || '') : '';
-        }
-      } else {
-        const metaHeaders = getMetadataColumnHeaders();
-        const metaKeys: (keyof import('./metadata-parser').MetadataRow)[] = [
-          'authors', 'year', 'title', 'journal', 'volume', 'issue',
-          'pages', 'doi', 'abstract', 'keywords', 'documentType', 'language', 'database',
-        ];
-        for (let i = 0; i < metaHeaders.length; i++) {
-          row[metaHeaders[i]] = meta ? meta[metaKeys[i]] as string : '';
-        }
+      for (const header of metadataHeaders) {
+        row[header] = meta ? (meta.originalColumns[header] || '') : '';
       }
     }
 
@@ -447,8 +412,8 @@ export function exportFilteredToExcel(results: AnalysisResult[], ratedAspects?: 
   for (let i = 0; i < aspectColumns.length; i++) {
     colWidths.push({ wch: 50 }); // Narrower columns since content is shorter
   }
-  if (metadata) {
-    const activeHeaders = (metadataHeaders && metadataHeaders.length > 0) ? metadataHeaders : getMetadataColumnHeaders();
+  if (metadata && metadataHeaders && metadataHeaders.length > 0) {
+    const activeHeaders = metadataHeaders;
     for (const header of activeHeaders) {
       const lower = header.toLowerCase();
       if (lower.includes('abstract') || lower.includes('link')) {
