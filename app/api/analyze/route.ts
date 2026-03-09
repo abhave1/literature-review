@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { asuAimlClient } from '@/lib/asu-aiml-client';
+import { EXCLUSION_HANDLING_INSTRUCTIONS, EXCLUSION_EXAMPLE } from '@/lib/prompts/default-mxml-prompt';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300; // 5 minutes max
@@ -154,11 +155,7 @@ DO NOT FORGET OR EXCLUDE ANY OF THE PROVIDED RATED ASPECTS.
 
 IMPORTANT: You MUST address EVERY SINGLE rated aspect listed above. Do not skip any aspect numbers. Go through each aspect systematically (from 1 to however many are listed). Answer each aspect with either Yes or No only.
 
-CRITICAL: Some rated aspects contain EXCLUSION criteria (e.g., "EXCLUDE EACH AND ALL OF the following types:" followed by bullet points). When exclusion criteria are present, you MUST follow this procedure:
-1. First, determine if the paper meets the INCLUSION criteria (the main question).
-2. Then, BEFORE giving your final answer, explicitly check EACH exclusion criterion listed.
-3. If the paper matches ANY exclusion criterion, your final answer MUST be No, regardless of whether it meets the inclusion criteria.
-Exclusion criteria ALWAYS override inclusion criteria.
+${EXCLUSION_HANDLING_INSTRUCTIONS}
 
 After all your reasoning, add your compiled response in this format in markdown, with consistent spacing, no icons or emojis. If you don't have enough information to answer a question, don't guess, but rather pose that as a question and don't answer it or make a probabilistic guess. DO NOT include spacers between your aspects, include every single necessary markdown character (eg. new line, tabs, dashes etc.) to preserve formatting. DO NOT include [cite: start] tags or any file citation tags.
 
@@ -168,7 +165,7 @@ The format of your response should be:
 
 ### Aspect (1) - [Rated question]
 
-(a) [Yes or No] - [Final conclusion. If any exclusion criterion from (a) applies, this MUST be No.]
+(a) [Yes or No] - [Final conclusion. If any exclusion/disqualification criterion applies, this MUST be No.]
 
 (b) [Explanation that provides a step-by-step rationale and reasoning chain from you, the LLM, as to why you decided to make this conclusion]
 
@@ -182,14 +179,7 @@ Do NOT omit the " - " separator. Do NOT write free-form text without the Yes/No 
 
 CRITICAL: Use "Aspect (1)" with parentheses around the number, NOT "Aspect [1]" with square brackets. The aspect number must be in parentheses.
 
-Example of a good formatted response for an aspect WITH exclusion criteria:
-
-### Aspect (7) - Does this paper FOCUS ON applying machine learning methods in the context of differential item functioning detection? EXCLUDE papers that only mention or discuss DIF without focusing on it.
-(a) No - Although the paper mentions DIF, it is excluded because it only discusses DIF as a side example, not as the central focus.
-
-(b) The paper's main contribution is a general multivariate tree boosting method. DIF is mentioned once as a motivating application but the paper does not develop, test, or evaluate any DIF detection method.
-
-(c) "For instance, in the context of psychological testing, it is important to discover grouping variables that influence particular items in a test, indicating differential item functioning." Located on Page 1. This is the only mention of DIF in the entire paper.
+${EXCLUSION_EXAMPLE}
 
 Example of a good formatted response for an aspect WITHOUT exclusion criteria:
 
@@ -220,13 +210,15 @@ DO NOT FORGET OR EXCLUDE ANY OF THE PROVIDED RATED ASPECTS.
 
 IMPORTANT: You MUST address EVERY SINGLE rated aspect listed above. Do not skip any aspect numbers. Go through each aspect systematically (from 1 to however many are listed). Answer each aspect with either Yes or No only.
 
+${EXCLUSION_HANDLING_INSTRUCTIONS}
+
 After all your reasoning, add your compiled response in this format in markdown, with consistent spacing, no icons or emojis. If you don't have enough information to answer a question, don't guess, but rather pose that as a question and don't answer it or make a probabilistic guess. DO NOT include spacers between your aspects, include every single necessary markdown character (eg. new line, tabs, dashes etc.) to preserve formatting. DO NOT include [cite: start] tags or any file citation tags.
 
 The format of your response should be:
 
 ## [Title of the paper being reviewed]
 ### Aspect (1) - [Rated question]
-(a) [Yes or No] - [Conclusion made for the rated aspect from the provided text]
+(a) [Yes or No] - [Final conclusion. If any exclusion/disqualification criterion applies, this MUST be No.]
 (b) [Explanation that provides a step-by-step rationale and reasoning chain from you, the LLM, as to why you decided to make this conclusion]
 (c) [Evidence that you used for your chain of thought reasoning. Cite the location of the evidence by page number or section heading. Quote relevant text when possible. DO NOT use filecite tags or any link to the file. Only cite by writing plain text.]
 
@@ -236,7 +228,9 @@ You MUST start each subsection with the letter label in parentheses: (a), (b), (
 (a) MUST begin with exactly "Yes" or "No" followed by " - " and then your conclusion. Example: (a) Yes - The paper focuses on...
 Do NOT omit the " - " separator. Do NOT write free-form text without the Yes/No prefix in subsection (a).
 
-CRITICAL: Use "Aspect (1)" with parentheses around the number, NOT "Aspect [1]" with square brackets. The aspect number must be in parentheses.`;
+CRITICAL: Use "Aspect (1)" with parentheses around the number, NOT "Aspect [1]" with square brackets. The aspect number must be in parentheses.
+
+${EXCLUSION_EXAMPLE}`;
 
         prompt = `Here is the extracted text to analyze:\n\n${text}`;
     }
@@ -245,7 +239,7 @@ CRITICAL: Use "Aspect (1)" with parentheses around the number, NOT "Aspect [1]" 
       model_provider: 'gcp-deepmind',
       model_name: 'geminiflash2',
       model_params: {
-        temperature: 0.7,
+        temperature: 0.2,
       },
       systemPrompt: systemPromptToUse // Pass the override if it exists
     });
