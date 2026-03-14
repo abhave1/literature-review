@@ -7,6 +7,7 @@ import AccessKeyPrompt from '@/components/AccessKeyPrompt';
 import MetadataUpload from '@/components/MetadataUpload';
 import { useBatchProcessor } from '@/lib/hooks/use-batch-processor';
 import { MetadataMap, normalizeFilename } from '@/lib/metadata-parser';
+import { DEFAULT_ICAP_SYSTEM_PROMPT } from '@/lib/prompts/default-mxml-prompt';
 
 interface AnalysisResult {
   fileName: string;
@@ -54,6 +55,14 @@ export default function Home() {
   const [metadata, setMetadata] = useState<MetadataMap | null>(null);
   const [metadataHeaders, setMetadataHeaders] = useState<string[]>([]);
 
+  // System prompt state
+  const [systemPrompt, setSystemPrompt] = useState<string>(DEFAULT_ICAP_SYSTEM_PROMPT);
+  const [isLoadingPrompt, setIsLoadingPrompt] = useState(true);
+  const [isSavingPrompt, setIsSavingPrompt] = useState(false);
+  const [promptSaveStatus, setPromptSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
+  const [showSystemPrompt, setShowSystemPrompt] = useState(false);
+  const [promptIsDefault, setPromptIsDefault] = useState(true);
+
   // Blob storage state
   const [blobFiles, setBlobFiles] = useState<BlobFile[]>([]);
   const [isLoadingBlob, setIsLoadingBlob] = useState(false);
@@ -96,10 +105,11 @@ export default function Home() {
     }
   }, []);
 
-  // Load blob files when authenticated
+  // Load blob files and prompt when authenticated
   useEffect(() => {
     if (isAuthenticated) {
       loadBlobFiles();
+      loadPrompt();
     }
   }, [isAuthenticated]);
 
@@ -115,6 +125,67 @@ export default function Home() {
       console.error('Failed to load blob files:', err);
     } finally {
       setIsLoadingBlob(false);
+    }
+  };
+
+  // Load saved prompt from Vercel Blob
+  const loadPrompt = async () => {
+    setIsLoadingPrompt(true);
+    try {
+      const res = await fetch('/api/prompt?mode=icap');
+      const data = await res.json();
+      if (data.systemPrompt) {
+        setSystemPrompt(data.systemPrompt);
+      }
+      setPromptIsDefault(data.isDefault ?? true);
+    } catch (err) {
+      console.error('Failed to load prompt:', err);
+    } finally {
+      setIsLoadingPrompt(false);
+    }
+  };
+
+  // Save prompt to Vercel Blob
+  const savePrompt = async () => {
+    setIsSavingPrompt(true);
+    setPromptSaveStatus('idle');
+    try {
+      const res = await fetch('/api/prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ systemPrompt, ratedAspects, mode: 'icap' }),
+      });
+      if (!res.ok) {
+        throw new Error('Failed to save');
+      }
+      setPromptSaveStatus('saved');
+      setPromptIsDefault(false);
+      setTimeout(() => setPromptSaveStatus('idle'), 3000);
+    } catch (err) {
+      console.error('Failed to save prompt:', err);
+      setPromptSaveStatus('error');
+    } finally {
+      setIsSavingPrompt(false);
+    }
+  };
+
+  // Reset prompt to defaults
+  const resetPrompt = async () => {
+    if (!confirm('Reset prompt to defaults? This will delete your saved customizations.')) {
+      return;
+    }
+    setIsSavingPrompt(true);
+    try {
+      await fetch('/api/prompt?mode=icap', { method: 'DELETE' });
+      setSystemPrompt(DEFAULT_ICAP_SYSTEM_PROMPT);
+      setPromptIsDefault(true);
+      setPromptSaveStatus('saved');
+      setTimeout(() => setPromptSaveStatus('idle'), 3000);
+    } catch (err) {
+      console.error('Failed to reset prompt:', err);
+      setPromptSaveStatus('error');
+    } finally {
+      setIsSavingPrompt(false);
     }
   };
 
@@ -318,6 +389,7 @@ export default function Home() {
             extractionSuccess: true,
           }],
           ratedAspects: aspects?.trim() || undefined,
+          customSystemPrompt: systemPrompt?.trim() || undefined,
         }),
       });
 
@@ -490,6 +562,85 @@ export default function Home() {
             disabled={processor.isProcessing}
             className="w-full h-48 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical font-mono text-sm text-black disabled:bg-gray-100 disabled:cursor-not-allowed"
           />
+        </div>
+
+        {/* System Prompt (Advanced) */}
+        <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <button
+              onClick={() => setShowSystemPrompt(!showSystemPrompt)}
+              className="w-full px-4 py-3 bg-gray-50 hover:bg-gray-100 flex justify-between items-center transition-colors"
+            >
+              <span className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                System Prompt (Advanced)
+                {!promptIsDefault && (
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">customized</span>
+                )}
+              </span>
+              <svg
+                className={`w-5 h-5 text-gray-400 transition-transform ${showSystemPrompt ? 'rotate-180' : ''}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {showSystemPrompt && (
+              <div className="p-4 border-t border-gray-200">
+                <p className="text-sm text-gray-500 mb-3">
+                  This is the full system prompt sent to the AI. Use <code className="bg-gray-100 px-1 py-0.5 rounded text-xs">{'{{RATED_ASPECTS}}'}</code> as a placeholder where rated aspects will be inserted.
+                </p>
+                {isLoadingPrompt ? (
+                  <div className="flex items-center justify-center py-8 text-gray-500">
+                    <svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Loading prompt...
+                  </div>
+                ) : (
+                  <>
+                    <textarea
+                      className="w-full h-96 p-4 border border-gray-300 rounded-lg font-mono text-xs bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-black"
+                      placeholder="Enter the full system prompt..."
+                      value={systemPrompt}
+                      onChange={(e) => setSystemPrompt(e.target.value)}
+                      disabled={processor.isProcessing}
+                    />
+                    <div className="flex items-center gap-3 mt-3">
+                      <button
+                        onClick={savePrompt}
+                        disabled={isSavingPrompt || processor.isProcessing}
+                        className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isSavingPrompt ? 'Saving...' : 'Save Prompt'}
+                      </button>
+                      {!promptIsDefault && (
+                        <button
+                          onClick={resetPrompt}
+                          disabled={isSavingPrompt || processor.isProcessing}
+                          className="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          Reset to Default
+                        </button>
+                      )}
+                      {promptSaveStatus === 'saved' && (
+                        <span className="text-sm text-green-600 font-medium">Saved!</span>
+                      )}
+                      {promptSaveStatus === 'error' && (
+                        <span className="text-sm text-red-600 font-medium">Failed to save</span>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Article Metadata (Optional) */}

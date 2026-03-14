@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { put, list, del } from '@vercel/blob';
-import { DEFAULT_MXML_SYSTEM_PROMPT, DEFAULT_ASPECTS } from '@/lib/prompts/default-mxml-prompt';
+import { DEFAULT_MXML_SYSTEM_PROMPT, DEFAULT_ASPECTS, DEFAULT_ICAP_SYSTEM_PROMPT } from '@/lib/prompts/default-mxml-prompt';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// Blob path for storing the prompt config
+// Blob paths for storing prompt configs
 const PROMPT_BLOB_PATH = 'config/mxml-prompt.json';
+const ICAP_PROMPT_BLOB_PATH = 'config/icap-prompt.json';
+
+function getConfigForMode(mode: string) {
+  if (mode === 'icap') {
+    return { blobPath: ICAP_PROMPT_BLOB_PATH, defaultPrompt: DEFAULT_ICAP_SYSTEM_PROMPT, defaultAspects: '' };
+  }
+  return { blobPath: PROMPT_BLOB_PATH, defaultPrompt: DEFAULT_MXML_SYSTEM_PROMPT, defaultAspects: DEFAULT_ASPECTS };
+}
 
 export interface SavedPrompt {
   systemPrompt: string;
@@ -19,25 +27,29 @@ export interface SavedPrompt {
  * Retrieves the saved system prompt and rated aspects from Vercel Blob
  * Returns defaults if not found
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const mode = request.nextUrl.searchParams.get('mode') || 'mxml';
+    const { blobPath, defaultPrompt, defaultAspects } = getConfigForMode(mode);
+    const blobFilename = blobPath.split('/').pop()!;
+
     // List blobs to find the config file
     const { blobs } = await list({ prefix: 'config/' });
     console.log('Found blobs:', blobs.map(b => ({ pathname: b.pathname, url: b.url })));
 
     // Find the config blob - check both exact match and ends-with
     const configBlob = blobs.find(b =>
-      b.pathname === PROMPT_BLOB_PATH ||
-      b.pathname.endsWith('mxml-prompt.json')
+      b.pathname === blobPath ||
+      b.pathname.endsWith(blobFilename)
     );
 
-    console.log('Config blob found:', configBlob ? 'yes' : 'no');
+    console.log(`Config blob found for ${mode}:`, configBlob ? 'yes' : 'no');
 
     if (!configBlob) {
       // No saved config, return defaults
       return NextResponse.json({
-        systemPrompt: DEFAULT_MXML_SYSTEM_PROMPT,
-        ratedAspects: DEFAULT_ASPECTS,
+        systemPrompt: defaultPrompt,
+        ratedAspects: defaultAspects,
         isDefault: true,
       }, {
         headers: { 'Cache-Control': 'no-store, max-age=0' },
@@ -50,19 +62,21 @@ export async function GET() {
     console.log('Loaded config:', savedConfig.updatedAt);
 
     return NextResponse.json({
-      systemPrompt: savedConfig.systemPrompt || DEFAULT_MXML_SYSTEM_PROMPT,
-      ratedAspects: savedConfig.ratedAspects || DEFAULT_ASPECTS,
+      systemPrompt: savedConfig.systemPrompt || defaultPrompt,
+      ratedAspects: savedConfig.ratedAspects || defaultAspects,
       isDefault: false,
       updatedAt: savedConfig.updatedAt,
     }, {
       headers: { 'Cache-Control': 'no-store, max-age=0' },
     });
   } catch (error) {
+    const mode = request.nextUrl.searchParams.get('mode') || 'mxml';
+    const { defaultPrompt, defaultAspects } = getConfigForMode(mode);
     console.error('Failed to load prompt from Blob:', error);
     // Return defaults on error
     return NextResponse.json({
-      systemPrompt: DEFAULT_MXML_SYSTEM_PROMPT,
-      ratedAspects: DEFAULT_ASPECTS,
+      systemPrompt: defaultPrompt,
+      ratedAspects: defaultAspects,
       isDefault: true,
       error: 'Failed to load from storage, using defaults',
     });
@@ -77,7 +91,9 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { systemPrompt, ratedAspects } = body;
+    const { systemPrompt, ratedAspects, mode } = body;
+    const { blobPath } = getConfigForMode(mode || 'mxml');
+    const blobFilename = blobPath.split('/').pop()!;
 
     if (typeof systemPrompt !== 'string' || typeof ratedAspects !== 'string') {
       return NextResponse.json(
@@ -86,11 +102,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Delete any existing prompt blobs first
+    // Delete any existing prompt blobs for this mode first
     const { blobs } = await list({ prefix: 'config/' });
     const existing = blobs.filter(b =>
-      b.pathname === PROMPT_BLOB_PATH ||
-      b.pathname.endsWith('mxml-prompt.json')
+      b.pathname === blobPath ||
+      b.pathname.endsWith(blobFilename)
     );
     if (existing.length > 0) {
       await del(existing.map(b => b.url));
@@ -103,7 +119,7 @@ export async function POST(request: NextRequest) {
       updatedAt: new Date().toISOString(),
     };
 
-    const result = await put(PROMPT_BLOB_PATH, JSON.stringify(configData, null, 2), {
+    const result = await put(blobPath, JSON.stringify(configData, null, 2), {
       access: 'public',
       addRandomSuffix: false,
       cacheControlMaxAge: 0,
@@ -127,11 +143,18 @@ export async function POST(request: NextRequest) {
  * DELETE /api/prompt
  * Resets the prompt to defaults by deleting from Blob
  */
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   try {
-    // List and find the config blob
+    const mode = request.nextUrl.searchParams.get('mode') || 'mxml';
+    const { blobPath } = getConfigForMode(mode);
+    const blobFilename = blobPath.split('/').pop()!;
+
+    // List and find the config blob for this mode
     const { blobs } = await list({ prefix: 'config/' });
-    const configBlob = blobs.find(b => b.pathname === PROMPT_BLOB_PATH);
+    const configBlob = blobs.find(b =>
+      b.pathname === blobPath ||
+      b.pathname.endsWith(blobFilename)
+    );
 
     if (configBlob) {
       await del(configBlob.url);

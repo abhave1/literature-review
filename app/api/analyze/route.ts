@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { asuAimlClient } from '@/lib/asu-aiml-client';
-import { EXCLUSION_HANDLING_INSTRUCTIONS, EXCLUSION_EXAMPLE } from '@/lib/prompts/default-mxml-prompt';
+import { EXCLUSION_HANDLING_INSTRUCTIONS, EXCLUSION_EXAMPLE, DEFAULT_ICAP_SYSTEM_PROMPT, buildSystemPrompt } from '@/lib/prompts/default-mxml-prompt';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300; // 5 minutes max
@@ -193,51 +193,19 @@ Example of a good formatted response for an aspect WITHOUT exclusion criteria:
 
         prompt = `Here is the extracted text to analyze:\n\n${text}`;
     } else {
-        // ICAP mode: Use strict yes/no format matching MxML
-        systemPromptToUse = `You are a systematic review expert tasked with reviewing published papers. For each given article, carefully go through all the contents in the file.
-
----------------------------------------
-Rated Aspects:
-
-${ratedAspects || '[No rated aspects provided]'}
-
----------------------------------------
-General instructions:
-
-Follow the same format for each and EVERY rated aspect.
-
-DO NOT FORGET OR EXCLUDE ANY OF THE PROVIDED RATED ASPECTS.
-
-IMPORTANT: You MUST address EVERY SINGLE rated aspect listed above. Do not skip any aspect numbers. Go through each aspect systematically (from 1 to however many are listed). Answer each aspect with either Yes or No only.
-
-${EXCLUSION_HANDLING_INSTRUCTIONS}
-
-After all your reasoning, add your compiled response in this format in markdown, with consistent spacing, no icons or emojis. If you don't have enough information to answer a question, don't guess, but rather pose that as a question and don't answer it or make a probabilistic guess. DO NOT include spacers between your aspects, include every single necessary markdown character (eg. new line, tabs, dashes etc.) to preserve formatting. DO NOT include [cite: start] tags or any file citation tags.
-
-The format of your response should be:
-
-## [Title of the paper being reviewed]
-### Aspect (1) - [Rated question]
-(a) [Yes or No] - [Final conclusion. If any exclusion/disqualification criterion applies, this MUST be No.]
-(b) [Explanation that provides a step-by-step rationale and reasoning chain from you, the LLM, as to why you decided to make this conclusion]
-(c) [Evidence that you used for your chain of thought reasoning. Cite the location of the evidence by page number or section heading. Quote relevant text when possible. DO NOT use filecite tags or any link to the file. Only cite by writing plain text.]
-
-DO NOT deviate from this format in your response. Each subsection (a), (b), (c) MUST be on its own separate paragraph with a blank line before it.
-
-You MUST start each subsection with the letter label in parentheses: (a), (b), (c).
-(a) MUST begin with exactly "Yes" or "No" followed by " - " and then your conclusion. Example: (a) Yes - The paper focuses on...
-Do NOT omit the " - " separator. Do NOT write free-form text without the Yes/No prefix in subsection (a).
-
-CRITICAL: Use "Aspect (1)" with parentheses around the number, NOT "Aspect [1]" with square brackets. The aspect number must be in parentheses.
-
-${EXCLUSION_EXAMPLE}`;
+        // ICAP mode: Use custom system prompt if provided, otherwise use default
+        if (customSystemPrompt) {
+            systemPromptToUse = buildSystemPrompt(customSystemPrompt, ratedAspects || '');
+        } else {
+            systemPromptToUse = buildSystemPrompt(DEFAULT_ICAP_SYSTEM_PROMPT, ratedAspects || '');
+        }
 
         prompt = `Here is the extracted text to analyze:\n\n${text}`;
     }
 
     const analysisResult = await asuAimlClient.query(prompt, {
       model_provider: 'gcp-deepmind',
-      model_name: 'geminiflash2',
+      model_name: 'geminipro3_1',
       model_params: {
         temperature: 0.2,
       },
