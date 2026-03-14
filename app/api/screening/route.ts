@@ -108,7 +108,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<BatchScre
     // Call the LLM
     const result = await asuAimlClient.query(userPrompt, {
       model_provider: 'gcp-deepmind',
-      model_name: 'geminiflash2',
+      model_name: 'geminipro3_1',
       model_params: {
         temperature: 0.2, // Lower temperature for consistent JSON output
       },
