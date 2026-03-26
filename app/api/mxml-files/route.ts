@@ -7,6 +7,8 @@ export const runtime = 'edge';
 const FOLDERS: Record<string, { prefix: string; tokenEnv: string }> = {
   'mxml': { prefix: 'mxml-pdfs/', tokenEnv: 'BLOB_MXML_READ_WRITE_TOKEN' },
   'icap': { prefix: 'icap-papers/', tokenEnv: 'BLOB_READ_WRITE_TOKEN' },
+  'mxml4-measurement': { prefix: 'mxml4-measurement/', tokenEnv: 'BLOB_MXML_READ_WRITE_TOKEN' },
+  'mxml4-nonmeasurement': { prefix: 'mxml4-nonmeasurement/', tokenEnv: 'BLOB_MXML_READ_WRITE_TOKEN' },
 };
 
 export async function GET(request: NextRequest) {

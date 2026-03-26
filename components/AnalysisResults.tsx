@@ -24,6 +24,7 @@ interface AnalysisResultsProps {
   ratedAspects?: string;
   metadata?: MetadataMap | null;
   metadataHeaders?: string[];
+  journalTypeMap?: Map<string, string>;
 }
 
 export default function AnalysisResults({
@@ -34,6 +35,7 @@ export default function AnalysisResults({
   ratedAspects,
   metadata,
   metadataHeaders,
+  journalTypeMap,
 }: AnalysisResultsProps) {
   const [openIndexes, setOpenIndexes] = useState<Set<number>>(new Set());
 
@@ -61,15 +63,15 @@ export default function AnalysisResults({
   };
 
   const handleExportExcel = () => {
-    exportToExcel(results, ratedAspects, metadata || undefined, metadataHeaders);
+    exportToExcel(results, ratedAspects, metadata || undefined, metadataHeaders, journalTypeMap);
   };
 
   const handleExportFilteredExcel = () => {
-    exportFilteredToExcel(results, ratedAspects, metadata || undefined, metadataHeaders);
+    exportFilteredToExcel(results, ratedAspects, metadata || undefined, metadataHeaders, journalTypeMap);
   };
 
   const handleExportCSV = () => {
-    exportToCSV(results, ratedAspects, metadata || undefined, metadataHeaders);
+    exportToCSV(results, ratedAspects, metadata || undefined, metadataHeaders, journalTypeMap);
   };
 
   // Compute mismatch info when metadata is provided

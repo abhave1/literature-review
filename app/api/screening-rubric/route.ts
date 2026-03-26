@@ -11,6 +11,7 @@ export const dynamic = 'force-dynamic';
 
 // Blob path for storing the screening rubric config
 const RUBRIC_BLOB_PATH = 'config/screening-rubrics.json';
+const RUBRIC_TOKEN = process.env.BLOB_MXML_READ_WRITE_TOKEN;
 
 export interface SavedRubrics {
   rubrics: ScreeningRubrics;
@@ -26,7 +27,7 @@ export interface SavedRubrics {
 export async function GET() {
   try {
     // List blobs to find the config file
-    const { blobs } = await list({ prefix: 'config/' });
+    const { blobs } = await list({ prefix: 'config/', token: RUBRIC_TOKEN });
 
     // Find the rubrics blob
     const rubricBlob = blobs.find(
@@ -111,14 +112,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Delete any existing rubric blobs first
-    const { blobs } = await list({ prefix: 'config/' });
+    const { blobs } = await list({ prefix: 'config/', token: RUBRIC_TOKEN });
     const existing = blobs.filter(
       (b) =>
         b.pathname === RUBRIC_BLOB_PATH ||
         b.pathname.endsWith('screening-rubrics.json')
     );
     if (existing.length > 0) {
-      await del(existing.map((b) => b.url));
+      await del(existing.map((b) => b.url), { token: RUBRIC_TOKEN });
     }
 
     // Write fresh
@@ -135,6 +136,7 @@ export async function POST(request: NextRequest) {
         access: 'public',
         addRandomSuffix: false,
         cacheControlMaxAge: 0,
+        token: RUBRIC_TOKEN,
       }
     );
 
@@ -159,7 +161,7 @@ export async function POST(request: NextRequest) {
 export async function DELETE() {
   try {
     // List and find the rubrics blob
-    const { blobs } = await list({ prefix: 'config/' });
+    const { blobs } = await list({ prefix: 'config/', token: RUBRIC_TOKEN });
     const rubricBlobs = blobs.filter(
       (b) =>
         b.pathname === RUBRIC_BLOB_PATH ||
@@ -167,7 +169,7 @@ export async function DELETE() {
     );
 
     if (rubricBlobs.length > 0) {
-      await del(rubricBlobs.map((b) => b.url));
+      await del(rubricBlobs.map((b) => b.url), { token: RUBRIC_TOKEN });
     }
 
     return NextResponse.json({

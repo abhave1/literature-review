@@ -24,7 +24,7 @@ interface AnalysisResult {
  * @param results - Analysis results from the API
  * @param ratedAspects - Original rated aspects text from the prompt (used for fixed column headers)
  */
-export function exportToExcel(results: AnalysisResult[], ratedAspects?: string, metadata?: MetadataMap, metadataHeaders?: string[]): void {
+export function exportToExcel(results: AnalysisResult[], ratedAspects?: string, metadata?: MetadataMap, metadataHeaders?: string[], journalTypeMap?: Map<string, string>): void {
   // Parse the rated aspects from the prompt to get fixed column headers
   const aspectDefinitions = ratedAspects ? parseRatedAspects(ratedAspects) : [];
   const useFixedColumns = aspectDefinitions.length > 0;
@@ -78,6 +78,9 @@ export function exportToExcel(results: AnalysisResult[], ratedAspects?: string, 
 
   for (const { fileName, parsed, error } of parsedResults) {
     const row: any = { 'File Name': fileName };
+    if (journalTypeMap?.size) {
+      row['Journal Type'] = journalTypeMap.get(fileName) || '';
+    }
 
     if (error) {
       row['Error'] = error;
@@ -129,6 +132,9 @@ export function exportToExcel(results: AnalysisResult[], ratedAspects?: string, 
 
   // Set column widths (FileName + aspect columns + metadata columns)
   const colWidths = [{ wch: 30 }]; // File Name column
+  if (journalTypeMap?.size) {
+    colWidths.push({ wch: 25 }); // Journal Type column
+  }
   for (let i = 0; i < aspectColumns.length; i++) {
     colWidths.push({ wch: 80 }); // Wider columns for combined content
   }
@@ -167,7 +173,7 @@ export function exportToExcel(results: AnalysisResult[], ratedAspects?: string, 
  * @param results - Analysis results from the API
  * @param ratedAspects - Original rated aspects text from the prompt (used for fixed column headers)
  */
-export function exportToCSV(results: AnalysisResult[], ratedAspects?: string, metadata?: MetadataMap, metadataHeaders?: string[]): void {
+export function exportToCSV(results: AnalysisResult[], ratedAspects?: string, metadata?: MetadataMap, metadataHeaders?: string[], journalTypeMap?: Map<string, string>): void {
   // Parse the rated aspects from the prompt to get fixed column headers
   const aspectDefinitions = ratedAspects ? parseRatedAspects(ratedAspects) : [];
   const useFixedColumns = aspectDefinitions.length > 0;
@@ -221,6 +227,9 @@ export function exportToCSV(results: AnalysisResult[], ratedAspects?: string, me
 
   for (const { fileName, parsed, error } of parsedResults) {
     const row: any = { 'File Name': fileName };
+    if (journalTypeMap?.size) {
+      row['Journal Type'] = journalTypeMap.get(fileName) || '';
+    }
 
     if (error) {
       row['Error'] = error;
@@ -315,7 +324,7 @@ function filterBeforeDash(text: string): string {
  * @param results - Analysis results from the API
  * @param ratedAspects - Original rated aspects text from the prompt (used for fixed column headers)
  */
-export function exportFilteredToExcel(results: AnalysisResult[], ratedAspects?: string, metadata?: MetadataMap, metadataHeaders?: string[]): void {
+export function exportFilteredToExcel(results: AnalysisResult[], ratedAspects?: string, metadata?: MetadataMap, metadataHeaders?: string[], journalTypeMap?: Map<string, string>): void {
   // Parse the rated aspects from the prompt to get fixed column headers
   const aspectDefinitions = ratedAspects ? parseRatedAspects(ratedAspects) : [];
   const useFixedColumns = aspectDefinitions.length > 0;
@@ -369,6 +378,9 @@ export function exportFilteredToExcel(results: AnalysisResult[], ratedAspects?: 
 
   for (const { fileName, parsed, error } of parsedResults) {
     const row: any = { 'File Name': fileName };
+    if (journalTypeMap?.size) {
+      row['Journal Type'] = journalTypeMap.get(fileName) || '';
+    }
 
     if (error) {
       row['Error'] = error;
@@ -409,6 +421,9 @@ export function exportFilteredToExcel(results: AnalysisResult[], ratedAspects?: 
 
   // Set column widths (FileName + aspect columns + metadata columns)
   const colWidths = [{ wch: 30 }]; // File Name column
+  if (journalTypeMap?.size) {
+    colWidths.push({ wch: 25 }); // Journal Type column
+  }
   for (let i = 0; i < aspectColumns.length; i++) {
     colWidths.push({ wch: 50 }); // Narrower columns since content is shorter
   }

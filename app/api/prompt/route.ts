@@ -10,10 +10,15 @@ const PROMPT_BLOB_PATH = 'config/mxml-prompt.json';
 const ICAP_PROMPT_BLOB_PATH = 'config/icap-prompt.json';
 
 function getConfigForMode(mode: string) {
+  // MxML modes use BLOB_MXML_READ_WRITE_TOKEN (mxml-store)
+  // ICAP mode uses BLOB_READ_WRITE_TOKEN (icap store)
   if (mode === 'icap') {
-    return { blobPath: ICAP_PROMPT_BLOB_PATH, defaultPrompt: DEFAULT_ICAP_SYSTEM_PROMPT, defaultAspects: '' };
+    return { blobPath: ICAP_PROMPT_BLOB_PATH, defaultPrompt: DEFAULT_ICAP_SYSTEM_PROMPT, defaultAspects: '', token: process.env.BLOB_READ_WRITE_TOKEN };
   }
-  return { blobPath: PROMPT_BLOB_PATH, defaultPrompt: DEFAULT_MXML_SYSTEM_PROMPT, defaultAspects: DEFAULT_ASPECTS };
+  if (mode === 'mxml4') {
+    return { blobPath: 'config/mxml4-prompt.json', defaultPrompt: DEFAULT_MXML_SYSTEM_PROMPT, defaultAspects: DEFAULT_ASPECTS, token: process.env.BLOB_MXML_READ_WRITE_TOKEN };
+  }
+  return { blobPath: PROMPT_BLOB_PATH, defaultPrompt: DEFAULT_MXML_SYSTEM_PROMPT, defaultAspects: DEFAULT_ASPECTS, token: process.env.BLOB_MXML_READ_WRITE_TOKEN };
 }
 
 export interface SavedPrompt {
@@ -30,11 +35,11 @@ export interface SavedPrompt {
 export async function GET(request: NextRequest) {
   try {
     const mode = request.nextUrl.searchParams.get('mode') || 'mxml';
-    const { blobPath, defaultPrompt, defaultAspects } = getConfigForMode(mode);
+    const { blobPath, defaultPrompt, defaultAspects, token } = getConfigForMode(mode);
     const blobFilename = blobPath.split('/').pop()!;
 
     // List blobs to find the config file
-    const { blobs } = await list({ prefix: 'config/' });
+    const { blobs } = await list({ prefix: 'config/', token });
     console.log('Found blobs:', blobs.map(b => ({ pathname: b.pathname, url: b.url })));
 
     // Find the config blob - check both exact match and ends-with
@@ -92,7 +97,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { systemPrompt, ratedAspects, mode } = body;
-    const { blobPath } = getConfigForMode(mode || 'mxml');
+    const { blobPath, token } = getConfigForMode(mode || 'mxml');
     const blobFilename = blobPath.split('/').pop()!;
 
     if (typeof systemPrompt !== 'string' || typeof ratedAspects !== 'string') {
@@ -103,13 +108,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Delete any existing prompt blobs for this mode first
-    const { blobs } = await list({ prefix: 'config/' });
+    const { blobs } = await list({ prefix: 'config/', token });
     const existing = blobs.filter(b =>
       b.pathname === blobPath ||
       b.pathname.endsWith(blobFilename)
     );
     if (existing.length > 0) {
-      await del(existing.map(b => b.url));
+      await del(existing.map(b => b.url), { token });
     }
 
     // Write fresh
@@ -123,6 +128,7 @@ export async function POST(request: NextRequest) {
       access: 'public',
       addRandomSuffix: false,
       cacheControlMaxAge: 0,
+      token,
     });
 
     return NextResponse.json({
@@ -146,18 +152,18 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const mode = request.nextUrl.searchParams.get('mode') || 'mxml';
-    const { blobPath } = getConfigForMode(mode);
+    const { blobPath, token } = getConfigForMode(mode);
     const blobFilename = blobPath.split('/').pop()!;
 
     // List and find the config blob for this mode
-    const { blobs } = await list({ prefix: 'config/' });
+    const { blobs } = await list({ prefix: 'config/', token });
     const configBlob = blobs.find(b =>
       b.pathname === blobPath ||
       b.pathname.endsWith(blobFilename)
     );
 
     if (configBlob) {
-      await del(configBlob.url);
+      await del(configBlob.url, { token });
     }
 
     return NextResponse.json({
