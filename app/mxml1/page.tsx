@@ -7,7 +7,7 @@ export default function Mxml1Page() {
       promptMode="mxml"
       showUpload={true}
       fileCategories={[
-        { key: 'mxml', label: 'MxML PDFs', folderKey: 'mxml' },
+        { key: 'mxml', label: 'MxML PDFs', folderKey: 'mxml', blobPrefix: 'mxml-pdfs/' },
       ]}
     />
   );

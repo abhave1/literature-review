@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const files = formData.getAll('files') as File[];
+    const prefix = (formData.get('prefix') as string) || 'mxml-pdfs/';
 
     if (!files || files.length === 0) {
       return NextResponse.json(
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
             const arrayBuffer = await file.arrayBuffer();
             const buffer = Buffer.from(arrayBuffer);
 
-            const blob = await put(`mxml-pdfs/${file.name}`, buffer, {
+            const blob = await put(`${prefix}${file.name}`, buffer, {
               access: 'public',
               token,
               contentType: 'application/pdf',

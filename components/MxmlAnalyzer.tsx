@@ -39,6 +39,7 @@ export interface FileCategory {
   key: string;
   label: string;
   folderKey: string;
+  blobPrefix: string;
 }
 
 export interface MxmlAnalyzerProps {
@@ -88,10 +89,10 @@ export default function MxmlAnalyzer({
   const [showSystemPrompt, setShowSystemPrompt] = useState(false);
   const [promptIsDefault, setPromptIsDefault] = useState(true);
 
-  // Local upload state
-  const [showLocalUpload, setShowLocalUpload] = useState(false);
-  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
+  // Local upload state (keyed by category for multi-category support)
+  const [showLocalUpload, setShowLocalUpload] = useState<Record<string, boolean>>({});
+  const [uploadFilesByCategory, setUploadFilesByCategory] = useState<Record<string, File[]>>({});
+  const [uploadingCategory, setUploadingCategory] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [uploadError, setUploadError] = useState<string>('');
 
@@ -263,19 +264,21 @@ export default function MxmlAnalyzer({
     setSelectedFiles(next);
   };
 
-  // Local upload handler
-  const handleLocalUpload = async () => {
-    if (uploadFiles.length === 0) return;
+  // Local upload handler (accepts category key and blob prefix)
+  const handleLocalUpload = async (categoryKey: string, blobPrefix: string) => {
+    const files = uploadFilesByCategory[categoryKey] || [];
+    if (files.length === 0) return;
 
-    setIsUploading(true);
+    setUploadingCategory(categoryKey);
     setUploadError('');
-    setUploadProgress({ current: 0, total: uploadFiles.length });
+    setUploadProgress({ current: 0, total: files.length });
 
     try {
       const formData = new FormData();
-      uploadFiles.forEach(file => {
+      files.forEach(file => {
         formData.append('files', file);
       });
+      formData.append('prefix', blobPrefix);
 
       const res = await fetch('/api/upload-to-blob', {
         method: 'POST',
@@ -299,12 +302,12 @@ export default function MxmlAnalyzer({
         setUploadError(`${data.failCount} file(s) failed to upload`);
       }
 
-      setUploadFiles([]);
+      setUploadFilesByCategory(prev => ({ ...prev, [categoryKey]: [] }));
       loadFiles();
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
-      setIsUploading(false);
+      setUploadingCategory(null);
     }
   };
 
@@ -642,90 +645,96 @@ export default function MxmlAnalyzer({
           </div>
         </section>
 
-        {/* Upload Local Files Section (only shown when showUpload is true) */}
-        {showUpload && (
-          <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div
-              className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center cursor-pointer hover:bg-gray-100 transition-colors"
-              onClick={() => setShowLocalUpload(!showLocalUpload)}
-            >
-              <div>
-                <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                  <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                  </svg>
-                  Upload Local Files
-                  {uploadFiles.length > 0 && (
-                    <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">{uploadFiles.length} selected</span>
-                  )}
-                </h2>
-                <p className="text-sm text-gray-500">Upload PDFs from your computer to the storage.</p>
-              </div>
-              <svg
-                className={`w-5 h-5 text-gray-400 transition-transform ${showLocalUpload ? 'rotate-180' : ''}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+        {/* Upload Local Files Section (per-category) */}
+        {showUpload && fileCategories.map(cat => {
+          const catFiles = uploadFilesByCategory[cat.key] || [];
+          const isOpen = showLocalUpload[cat.key] || false;
+          const isCatUploading = uploadingCategory === cat.key;
+
+          return (
+            <section key={`upload-${cat.key}`} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div
+                className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center cursor-pointer hover:bg-gray-100 transition-colors"
+                onClick={() => setShowLocalUpload(prev => ({ ...prev, [cat.key]: !prev[cat.key] }))}
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
-
-            {showLocalUpload && (
-              <div className="p-6 space-y-4">
-                <FileUpload
-                  onFilesSelected={setUploadFiles}
-                  isProcessing={isUploading}
-                />
-
-                {uploadFiles.length > 0 && (
-                  <div className="flex items-center gap-4">
-                    <button
-                      onClick={handleLocalUpload}
-                      disabled={isUploading}
-                      className={`
-                        px-6 py-2 rounded-lg font-medium text-white transition-all
-                        ${isUploading
-                          ? 'bg-gray-400 cursor-not-allowed'
-                          : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'}
-                      `}
-                    >
-                      {isUploading ? (
-                        <span className="flex items-center gap-2">
-                          <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Uploading...
-                        </span>
-                      ) : (
-                        `Upload ${uploadFiles.length} Files to Storage`
-                      )}
-                    </button>
-
-                    {isUploading && uploadProgress.total > 0 && (
-                      <span className="text-sm text-gray-500">
-                        {uploadProgress.current} / {uploadProgress.total}
-                      </span>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                    <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    Upload to {cat.label}
+                    {catFiles.length > 0 && (
+                      <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">{catFiles.length} selected</span>
                     )}
-                  </div>
-                )}
-
-                {uploadError && (
-                  <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg border border-red-200 text-sm">
-                    {uploadError}
-                  </div>
-                )}
-
-                {!isUploading && uploadProgress.current > 0 && !uploadError && (
-                  <div className="bg-green-50 text-green-700 px-4 py-3 rounded-lg border border-green-200 text-sm">
-                    Successfully uploaded {uploadProgress.current} files!
-                  </div>
-                )}
+                  </h2>
+                  <p className="text-sm text-gray-500">Upload PDFs from your computer to {cat.label.toLowerCase()}.</p>
+                </div>
+                <svg
+                  className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
               </div>
-            )}
-          </section>
-        )}
+
+              {isOpen && (
+                <div className="p-6 space-y-4">
+                  <FileUpload
+                    onFilesSelected={(files) => setUploadFilesByCategory(prev => ({ ...prev, [cat.key]: files }))}
+                    isProcessing={isCatUploading}
+                  />
+
+                  {catFiles.length > 0 && (
+                    <div className="flex items-center gap-4">
+                      <button
+                        onClick={() => handleLocalUpload(cat.key, cat.blobPrefix)}
+                        disabled={uploadingCategory !== null}
+                        className={`
+                          px-6 py-2 rounded-lg font-medium text-white transition-all
+                          ${uploadingCategory !== null
+                            ? 'bg-gray-400 cursor-not-allowed'
+                            : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'}
+                        `}
+                      >
+                        {isCatUploading ? (
+                          <span className="flex items-center gap-2">
+                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Uploading...
+                          </span>
+                        ) : (
+                          `Upload ${catFiles.length} Files to ${cat.label}`
+                        )}
+                      </button>
+
+                      {isCatUploading && uploadProgress.total > 0 && (
+                        <span className="text-sm text-gray-500">
+                          {uploadProgress.current} / {uploadProgress.total}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {isCatUploading && uploadError && (
+                    <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg border border-red-200 text-sm">
+                      {uploadError}
+                    </div>
+                  )}
+
+                  {!isCatUploading && uploadingCategory === null && uploadProgress.current > 0 && !uploadError && (
+                    <div className="bg-green-50 text-green-700 px-4 py-3 rounded-lg border border-green-200 text-sm">
+                      Successfully uploaded {uploadProgress.current} files!
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+          );
+        })}
 
         {/* Step 2: File Selection */}
         <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
