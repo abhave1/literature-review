@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { put, list, del } from '@vercel/blob';
-import { DEFAULT_MXML_SYSTEM_PROMPT, DEFAULT_ASPECTS, DEFAULT_ICAP_SYSTEM_PROMPT } from '@/lib/prompts/default-mxml-prompt';
+import { DEFAULT_MXML_SYSTEM_PROMPT, DEFAULT_ASPECTS, DEFAULT_ICAP_SYSTEM_PROMPT, DEFAULT_MXML_OPEN_SYSTEM_PROMPT, DEFAULT_OPEN_ASPECTS } from '@/lib/prompts/default-mxml-prompt';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,6 +17,9 @@ function getConfigForMode(mode: string) {
   }
   if (mode === 'mxml4') {
     return { blobPath: 'config/mxml4-prompt.json', defaultPrompt: DEFAULT_MXML_SYSTEM_PROMPT, defaultAspects: DEFAULT_ASPECTS, token: process.env.BLOB_MXML_READ_WRITE_TOKEN };
+  }
+  if (mode === 'mxml4-open') {
+    return { blobPath: 'config/mxml4-open-prompt.json', defaultPrompt: DEFAULT_MXML_OPEN_SYSTEM_PROMPT, defaultAspects: DEFAULT_OPEN_ASPECTS, token: process.env.BLOB_MXML_READ_WRITE_TOKEN };
   }
   return { blobPath: PROMPT_BLOB_PATH, defaultPrompt: DEFAULT_MXML_SYSTEM_PROMPT, defaultAspects: DEFAULT_ASPECTS, token: process.env.BLOB_MXML_READ_WRITE_TOKEN };
 }
