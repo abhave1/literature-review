@@ -7,6 +7,7 @@ export default function Mxml4OpenPage() {
       promptMode="mxml4-open"
       showUpload={true}
       showJournalType={true}
+      navLinks={[{ href: '/screening', label: 'Screening →' }]}
       fileCategories={[
         { key: 'measurement', label: 'Measurement Journals', folderKey: 'mxml4-measurement', blobPrefix: 'mxml4-measurement/' },
         { key: 'nonmeasurement', label: 'Non-measurement Journals', folderKey: 'mxml4-nonmeasurement', blobPrefix: 'mxml4-nonmeasurement/' },

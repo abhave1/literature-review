@@ -10,6 +10,10 @@ export default function FulltextOpenEndedCSCLPage() {
       showJournalType={false}
       hideSystemPrompt={true}
       enableLocalPdfAdd={true}
+      navLinks={[
+        { href: '/metadata-screening-cscl-prototype', label: '← Step 1: Screening' },
+        { href: '/fulltext-analysis-close-ended-cscl-prototype', label: '← Step 2: Close-Ended' },
+      ]}
       ratedAspectsLabel="Rated Aspects"
       ratedAspectsDescription='Enter your rated aspects below. You can enter multiple rated aspects to be analyzed simultaneously. Each rated aspect must be listed on a separate line, led by "(#)". Note this bot handles open-ended questions. Your rated aspects can be phrased freely.'
       ratedAspectsPlaceholder={"(1) What collaborative learning strategies does this paper employ?\n(2) How does the paper measure learning outcomes in CSCL settings?\n(3) What technology platforms are used for collaboration?"}

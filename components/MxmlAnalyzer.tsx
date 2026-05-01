@@ -42,6 +42,11 @@ export interface FileCategory {
   blobPrefix: string;
 }
 
+export interface NavLink {
+  href: string;
+  label: string;
+}
+
 export interface MxmlAnalyzerProps {
   title: string;
   subtitle?: string;
@@ -54,6 +59,8 @@ export interface MxmlAnalyzerProps {
   ratedAspectsDescription?: string;
   ratedAspectsPlaceholder?: string;
   enableLocalPdfAdd?: boolean;
+  navLinks?: NavLink[];
+  showBetaBadge?: boolean;
 }
 
 export default function MxmlAnalyzer({
@@ -68,6 +75,8 @@ export default function MxmlAnalyzer({
   ratedAspectsDescription,
   ratedAspectsPlaceholder,
   enableLocalPdfAdd = false,
+  navLinks,
+  showBetaBadge = true,
 }: MxmlAnalyzerProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
@@ -522,15 +531,20 @@ export default function MxmlAnalyzer({
                 <p className="text-sm text-gray-600">{subtitle}</p>
               )}
             </div>
-            <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">Beta</span>
+            {showBetaBadge && (
+              <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">Beta</span>
+            )}
           </div>
           <div className="flex items-center gap-6">
-            <Link
-              href="/screening"
-              className="text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors"
-            >
-              Screening &rarr;
-            </Link>
+            {navLinks && navLinks.map(link => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors"
+              >
+                {link.label}
+              </Link>
+            ))}
             <div className="text-sm font-medium text-gray-500">
               {totalFileCount} Files Available
               {searchQuery && ` \u2022 ${allFilteredFiles.length} Filtered`}

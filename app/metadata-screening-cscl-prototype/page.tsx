@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import AccessKeyPrompt from '@/components/AccessKeyPrompt';
 import CsvUpload from '@/components/screening/CsvUpload';
 import ScreeningProgress from '@/components/screening/ScreeningProgress';
@@ -505,30 +506,39 @@ export default function MetadataScreeningCSCLPage() {
       )}
 
       {/* Sticky Navbar */}
-      <div className="bg-white border-b sticky top-0 z-10">
-        <div className="container mx-auto max-w-6xl px-6 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div>
-                <h1 className="text-lg font-bold text-black">AI-Assisted Literature Review Toolset</h1>
-                <p className="text-sm text-gray-600">Step 1: Article Metadata Screening</p>
-              </div>
-              {csvFile && (
-                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-sm rounded">
-                  {articles.length} articles
-                </span>
-              )}
+      <div className="bg-white border-b sticky top-0 z-10 shadow-sm backdrop-blur-sm bg-opacity-90">
+        <div className="container mx-auto px-4 py-4 flex justify-between items-center max-w-7xl">
+          <div className="flex items-center gap-4">
+            <div>
+              <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
+                AI-Assisted Literature Review Toolset
+              </h1>
+              <p className="text-sm text-gray-600">Step 1: Article Metadata Screening</p>
             </div>
-            <div className="flex items-center gap-6">
+            <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">Beta</span>
+          </div>
+          <div className="flex items-center gap-6">
+            <Link
+              href="/fulltext-analysis-close-ended-cscl-prototype"
+              className="text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors"
+            >
+              Step 2: Close-Ended &rarr;
+            </Link>
+            <Link
+              href="/fulltext-analysis-open-ended-cscl-prototype"
+              className="text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors"
+            >
+              Step 2: Open-Ended &rarr;
+            </Link>
+            <div className="text-sm font-medium text-gray-500">
+              {csvFile && <>{articles.length} articles</>}
               {results.length > 0 && (
-                <div className="flex items-center gap-4 text-sm">
-                  <span className="text-green-600">
-                    {results.filter((r) => r.decision === 'Include').length} included
-                  </span>
-                  <span className="text-red-600">
-                    {results.filter((r) => r.decision === 'Exclude').length} excluded
-                  </span>
-                </div>
+                <>
+                  {' \u2022 '}
+                  <span className="text-green-600">{results.filter((r) => r.decision === 'Include').length} included</span>
+                  {' \u2022 '}
+                  <span className="text-red-600">{results.filter((r) => r.decision === 'Exclude').length} excluded</span>
+                </>
               )}
             </div>
           </div>

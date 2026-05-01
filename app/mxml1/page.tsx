@@ -6,6 +6,7 @@ export default function Mxml1Page() {
       title="MxML Phase 1 Analysis Hub"
       promptMode="mxml"
       showUpload={true}
+      navLinks={[{ href: '/screening', label: 'Screening →' }]}
       fileCategories={[
         { key: 'mxml', label: 'MxML PDFs', folderKey: 'mxml', blobPrefix: 'mxml-pdfs/' },
       ]}
