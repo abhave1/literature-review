@@ -519,16 +519,16 @@ export default function MetadataScreeningCSCLPage() {
           </div>
           <div className="flex items-center gap-6">
             <Link
-              href="/fulltext-analysis-close-ended-cscl-prototype"
-              className="text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors"
-            >
-              Step 2: Close-Ended &rarr;
-            </Link>
-            <Link
               href="/fulltext-analysis-open-ended-cscl-prototype"
               className="text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors"
             >
               Step 2: Open-Ended &rarr;
+            </Link>
+            <Link
+              href="/fulltext-analysis-close-ended-cscl-prototype"
+              className="text-sm font-medium text-gray-600 hover:text-blue-600 transition-colors"
+            >
+              Step 3: Close-Ended &rarr;
             </Link>
             <div className="text-sm font-medium text-gray-500">
               {csvFile && <>{articles.length} articles</>}
