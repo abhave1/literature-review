@@ -44,18 +44,30 @@ export interface FileCategory {
 
 export interface MxmlAnalyzerProps {
   title: string;
+  subtitle?: string;
   promptMode: string;
   fileCategories: FileCategory[];
   showUpload?: boolean;
   showJournalType?: boolean;
+  hideSystemPrompt?: boolean;
+  ratedAspectsLabel?: string;
+  ratedAspectsDescription?: string;
+  ratedAspectsPlaceholder?: string;
+  enableLocalPdfAdd?: boolean;
 }
 
 export default function MxmlAnalyzer({
   title,
+  subtitle,
   promptMode,
   fileCategories,
   showUpload = false,
   showJournalType = false,
+  hideSystemPrompt = false,
+  ratedAspectsLabel,
+  ratedAspectsDescription,
+  ratedAspectsPlaceholder,
+  enableLocalPdfAdd = false,
 }: MxmlAnalyzerProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
@@ -502,9 +514,14 @@ export default function MxmlAnalyzer({
       <div className="bg-white border-b sticky top-0 z-10 shadow-sm backdrop-blur-sm bg-opacity-90">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center max-w-7xl">
           <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
-              {title}
-            </h1>
+            <div>
+              <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
+                {title}
+              </h1>
+              {subtitle && (
+                <p className="text-sm text-gray-600">{subtitle}</p>
+              )}
+            </div>
             <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">Beta</span>
           </div>
           <div className="flex items-center gap-6">
@@ -531,50 +548,56 @@ export default function MxmlAnalyzer({
           <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
             <div>
               <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                1. Configure Prompt
-                {!promptIsDefault && (
+                {hideSystemPrompt ? '1. Configure Rated Aspects' : '1. Configure Prompt'}
+                {!hideSystemPrompt && !promptIsDefault && (
                   <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">Customized</span>
                 )}
               </h2>
-              <p className="text-sm text-gray-500">Edit the system prompt and rated aspects for analysis.</p>
+              <p className="text-sm text-gray-500">
+                {hideSystemPrompt
+                  ? 'Enter the rated aspects to evaluate for each paper.'
+                  : 'Edit the system prompt and rated aspects for analysis.'}
+              </p>
             </div>
-            <div className="flex items-center gap-2">
-              {promptSaveStatus === 'saved' && (
-                <span className="text-sm text-green-600 flex items-center gap-1">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Saved
-                </span>
-              )}
-              {promptSaveStatus === 'error' && (
-                <span className="text-sm text-red-600">Save failed</span>
-              )}
-              <button
-                onClick={resetPrompt}
-                disabled={isSavingPrompt || processor.isProcessing || promptIsDefault}
-                className={`
-                  px-3 py-1.5 text-sm font-medium rounded-lg transition-all
-                  ${promptIsDefault
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}
-                `}
-              >
-                Reset to Default
-              </button>
-              <button
-                onClick={savePrompt}
-                disabled={isSavingPrompt || processor.isProcessing}
-                className={`
-                  px-4 py-1.5 text-sm font-medium rounded-lg text-white transition-all
-                  ${isSavingPrompt || processor.isProcessing
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-700'}
-                `}
-              >
-                {isSavingPrompt ? 'Saving...' : 'Save Prompt'}
-              </button>
-            </div>
+            {!hideSystemPrompt && (
+              <div className="flex items-center gap-2">
+                {promptSaveStatus === 'saved' && (
+                  <span className="text-sm text-green-600 flex items-center gap-1">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Saved
+                  </span>
+                )}
+                {promptSaveStatus === 'error' && (
+                  <span className="text-sm text-red-600">Save failed</span>
+                )}
+                <button
+                  onClick={resetPrompt}
+                  disabled={isSavingPrompt || processor.isProcessing || promptIsDefault}
+                  className={`
+                    px-3 py-1.5 text-sm font-medium rounded-lg transition-all
+                    ${promptIsDefault
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}
+                  `}
+                >
+                  Reset to Default
+                </button>
+                <button
+                  onClick={savePrompt}
+                  disabled={isSavingPrompt || processor.isProcessing}
+                  className={`
+                    px-4 py-1.5 text-sm font-medium rounded-lg text-white transition-all
+                    ${isSavingPrompt || processor.isProcessing
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700'}
+                  `}
+                >
+                  {isSavingPrompt ? 'Saving...' : 'Save Prompt'}
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="p-6 space-y-6">
@@ -591,20 +614,25 @@ export default function MxmlAnalyzer({
                 {/* Rated Aspects (Always Visible) */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Rated Aspects
-                    <span className="text-gray-400 font-normal ml-2">- These questions will be evaluated for each paper</span>
+                    {ratedAspectsLabel || 'Rated Aspects'}
+                    {!ratedAspectsLabel && (
+                      <span className="text-gray-400 font-normal ml-2">- These questions will be evaluated for each paper</span>
+                    )}
                   </label>
+                  {ratedAspectsDescription && (
+                    <p className="text-sm text-gray-600 mb-3">{ratedAspectsDescription}</p>
+                  )}
                   <textarea
                     className="w-full h-64 p-4 border border-gray-300 rounded-lg font-mono text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                    placeholder="Paste Appendix D (Rated Aspects definitions) here..."
+                    placeholder={ratedAspectsPlaceholder || "Paste Appendix D (Rated Aspects definitions) here..."}
                     value={ratedAspects}
                     onChange={(e) => setRatedAspects(e.target.value)}
                     disabled={processor.isProcessing}
                   />
                 </div>
 
-                {/* System Prompt (Collapsible) */}
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                {/* System Prompt (Collapsible) - hidden when hideSystemPrompt is true */}
+                {!hideSystemPrompt && <div className="border border-gray-200 rounded-lg overflow-hidden">
                   <button
                     onClick={() => setShowSystemPrompt(!showSystemPrompt)}
                     className="w-full px-4 py-3 bg-gray-50 hover:bg-gray-100 flex justify-between items-center transition-colors"
@@ -639,11 +667,58 @@ export default function MxmlAnalyzer({
                       />
                     </div>
                   )}
-                </div>
+                </div>}
               </>
             )}
           </div>
         </section>
+
+        {/* Local PDF drag-and-drop that adds to selected files */}
+        {enableLocalPdfAdd && (
+          <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                Add Local PDFs
+              </h2>
+              <p className="text-sm text-gray-500">Drag and drop additional PDFs from your computer. These will be added to your selected files for analysis.</p>
+            </div>
+            <div className="p-6">
+              <FileUpload
+                onFilesSelected={(newFiles) => {
+                  // Add local files as blob-like entries so they integrate with existing selection
+                  const newBlobFiles: BlobFile[] = newFiles.map(f => ({
+                    url: URL.createObjectURL(f),
+                    pathname: f.name,
+                    size: f.size,
+                    uploadedAt: new Date().toISOString(),
+                    name: f.name,
+                    journalType: 'Local Upload',
+                    _localFile: f,
+                  } as BlobFile & { _localFile: File }));
+
+                  // Add to the first category's file list
+                  const firstCatKey = fileCategories[0]?.key;
+                  if (firstCatKey) {
+                    setFilesByCategory(prev => ({
+                      ...prev,
+                      [firstCatKey]: [...(prev[firstCatKey] || []), ...newBlobFiles],
+                    }));
+                    // Auto-select the new files
+                    setSelectedFiles(prev => {
+                      const next = new Set(prev);
+                      newBlobFiles.forEach(f => next.add(f.url));
+                      return next;
+                    });
+                  }
+                }}
+                isProcessing={processor.isProcessing}
+              />
+            </div>
+          </section>
+        )}
 
         {/* Upload Local Files Section (per-category) */}
         {showUpload && fileCategories.map(cat => {
