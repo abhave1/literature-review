@@ -528,7 +528,9 @@ export default function MxmlAnalyzer({
                 {title}
               </h1>
               {subtitle && (
-                <p className="text-sm text-gray-600">{subtitle}</p>
+                <p className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
+                  {subtitle}
+                </p>
               )}
             </div>
             {showBetaBadge && (
@@ -695,9 +697,9 @@ export default function MxmlAnalyzer({
                 <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                 </svg>
-                Add Local PDFs
+                Add Local PDFs (One-time analysis)
               </h2>
-              <p className="text-sm text-gray-500">Drag and drop additional PDFs from your computer. These will be added to your selected files for analysis.</p>
+              <p className="text-sm text-gray-500">Drag and drop PDFs from your computer to use in this analysis session only. These files are <strong>not saved</strong> to the CSCL library. Use the &quot;Upload&quot; section below to permanently add files.</p>
             </div>
             <div className="p-6">
               <FileUpload
@@ -751,12 +753,12 @@ export default function MxmlAnalyzer({
                     <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                     </svg>
-                    Upload to {cat.label}
+                    Upload to {cat.label} (Permanent)
                     {catFiles.length > 0 && (
                       <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">{catFiles.length} selected</span>
                     )}
                   </h2>
-                  <p className="text-sm text-gray-500">Upload PDFs from your computer to {cat.label.toLowerCase()}.</p>
+                  <p className="text-sm text-gray-500">Permanently add PDFs to the {cat.label} library. Once uploaded, they will appear in the preloaded list and be available for all future analyses.</p>
                 </div>
                 <svg
                   className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}

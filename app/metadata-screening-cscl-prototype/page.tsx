@@ -126,7 +126,7 @@ export default function MetadataScreeningCSCLPage() {
   const [isLoadingCheckpoint, setIsLoadingCheckpoint] = useState(false);
 
   // UI state
-  const [showRubricEditor, setShowRubricEditor] = useState(false);
+  const [showRubricEditor, setShowRubricEditor] = useState(true);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['inclusionRules', 'exclusionRules']));
 
   // Refs
@@ -513,7 +513,9 @@ export default function MetadataScreeningCSCLPage() {
               <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
                 AI-Assisted Literature Review Toolset
               </h1>
-              <p className="text-sm text-gray-600">Step 1: Article Metadata Screening</p>
+              <p className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
+                Step 1: Article Metadata Screening
+              </p>
             </div>
             <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">Beta</span>
           </div>
