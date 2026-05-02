@@ -155,10 +155,10 @@ export default function MxmlAnalyzer({
     try {
       const res = await fetch(`/api/prompt?mode=${promptMode}`);
       const data = await res.json();
-      if (data.systemPrompt) {
+      if (data.systemPrompt !== undefined) {
         setSystemPrompt(data.systemPrompt);
       }
-      if (data.ratedAspects) {
+      if (data.ratedAspects !== undefined) {
         setRatedAspects(data.ratedAspects);
       }
       setPromptIsDefault(data.isDefault ?? true);
@@ -565,55 +565,53 @@ export default function MxmlAnalyzer({
             <div>
               <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
                 {hideSystemPrompt ? '1. Configure Rated Aspects' : '1. Configure Prompt'}
-                {!hideSystemPrompt && !promptIsDefault && (
+                {!promptIsDefault && (
                   <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">Customized</span>
                 )}
               </h2>
               <p className="text-sm text-gray-500">
                 {hideSystemPrompt
-                  ? 'Enter the rated aspects to evaluate for each paper.'
+                  ? 'Enter the rated aspects to evaluate for each paper. Save your aspects to persist them across sessions.'
                   : 'Edit the system prompt and rated aspects for analysis.'}
               </p>
             </div>
-            {!hideSystemPrompt && (
-              <div className="flex items-center gap-2">
-                {promptSaveStatus === 'saved' && (
-                  <span className="text-sm text-green-600 flex items-center gap-1">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    Saved
-                  </span>
-                )}
-                {promptSaveStatus === 'error' && (
-                  <span className="text-sm text-red-600">Save failed</span>
-                )}
-                <button
-                  onClick={resetPrompt}
-                  disabled={isSavingPrompt || processor.isProcessing || promptIsDefault}
-                  className={`
-                    px-3 py-1.5 text-sm font-medium rounded-lg transition-all
-                    ${promptIsDefault
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}
-                  `}
-                >
-                  Reset to Default
-                </button>
-                <button
-                  onClick={savePrompt}
-                  disabled={isSavingPrompt || processor.isProcessing}
-                  className={`
-                    px-4 py-1.5 text-sm font-medium rounded-lg text-white transition-all
-                    ${isSavingPrompt || processor.isProcessing
-                      ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-blue-600 hover:bg-blue-700'}
-                  `}
-                >
-                  {isSavingPrompt ? 'Saving...' : 'Save Prompt'}
-                </button>
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              {promptSaveStatus === 'saved' && (
+                <span className="text-sm text-green-600 flex items-center gap-1">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Saved
+                </span>
+              )}
+              {promptSaveStatus === 'error' && (
+                <span className="text-sm text-red-600">Save failed</span>
+              )}
+              <button
+                onClick={resetPrompt}
+                disabled={isSavingPrompt || processor.isProcessing || promptIsDefault}
+                className={`
+                  px-3 py-1.5 text-sm font-medium rounded-lg transition-all
+                  ${promptIsDefault
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}
+                `}
+              >
+                Reset to Default
+              </button>
+              <button
+                onClick={savePrompt}
+                disabled={isSavingPrompt || processor.isProcessing}
+                className={`
+                  px-4 py-1.5 text-sm font-medium rounded-lg text-white transition-all
+                  ${isSavingPrompt || processor.isProcessing
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700'}
+                `}
+              >
+                {isSavingPrompt ? 'Saving...' : (hideSystemPrompt ? 'Save Aspects' : 'Save Prompt')}
+              </button>
+            </div>
           </div>
 
           <div className="p-6 space-y-6">
