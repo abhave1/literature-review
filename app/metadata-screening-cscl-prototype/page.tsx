@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import AccessKeyPrompt from '@/components/AccessKeyPrompt';
 import CsvUpload from '@/components/screening/CsvUpload';
 import ScreeningProgress from '@/components/screening/ScreeningProgress';
 import ScreeningResults from '@/components/screening/ScreeningResults';
@@ -23,44 +22,6 @@ const DEFAULT_CSCL_RUBRICS: ScreeningRubrics = {
   mlTerms: '',
   psychometricianJobs: '',
 };
-
-const CSCL_SCREENING_PROMPT_TEMPLATE = `You are a systematic review expert. You will screen multiple studies based on their Title, Abstract, Year, and Journal.
-
-For EACH study, follow these steps:
-- Step 1: Label as "NoAbstract" if abstract is missing/empty. Otherwise, continue.
-- Step 2: Include if it meets ANY Inclusion Rule. Record ALL matching rules.
-- Step 3: For included studies, further check the Exclusion Rules - exclude if any applies.
-- Step 4: For excluded studies (excluded in Step 2 because no Inclusion Rule applied, or excluded in Step 3), identify which Exclusion Rule(s) were applied, and replace "Rules Used" with all identified Exclusion Rule(s).
-
-{{DEFINITIONS}}
-
-=== INCLUSION RULES ===
-{{INCLUSION_RULES}}
-
-=== EXCLUSION RULES ===
-{{EXCLUSION_RULES}}
-
-=== OUTPUT FORMAT ===
-You MUST respond with valid JSON only. No markdown, no explanation outside JSON.
-Return an array of screening results, one for each article in the exact order provided.
-
-{
-  "results": [
-    {
-      "index": 0,
-      "decision": "Include|Exclude|NoAbstract",
-      "rules_used": "RI1, RI3 or RE2, RE4 or NoAbstract or No RI applied",
-      "explanation": "Brief 1-2 sentence rationale"
-    }
-  ]
-}
-
-CRITICAL RULES:
-1. Return EXACTLY one result per article, in the same order as input
-2. "decision" must be exactly "Include", "Exclude", or "NoAbstract"
-3. "rules_used" should list rule prefixes (RI1, RE2, etc.) or "No RI applied" or "NoAbstract"
-4. Keep explanations brief but informative
-5. Output ONLY valid JSON, nothing else`;
 
 // Rubric section configs for the CSCL prototype (only 3 sections)
 interface SectionConfig {
@@ -92,10 +53,6 @@ const CSCL_RUBRIC_SECTIONS: SectionConfig[] = [
 ];
 
 export default function MetadataScreeningCSCLPage() {
-  // Auth state
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
   // CSV state
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [parsedCSV, setParsedCSV] = useState<ParsedCSV | null>(null);
@@ -133,38 +90,10 @@ export default function MetadataScreeningCSCLPage() {
   const processingRef = useRef(false);
   const cancelledRef = useRef(false);
 
-  // Check auth on mount
+  // Check for pending work after server authorization.
   useEffect(() => {
-    const storedKey = localStorage.getItem('app_access_key');
-    if (storedKey) {
-      fetch('/api/validate-key', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: storedKey }),
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.valid) {
-            setIsAuthenticated(true);
-          } else {
-            localStorage.removeItem('app_access_key');
-          }
-        })
-        .catch(() => {
-          localStorage.removeItem('app_access_key');
-        })
-        .finally(() => setIsCheckingAuth(false));
-    } else {
-      setIsCheckingAuth(false);
-    }
+    checkForPendingBatch();
   }, []);
-
-  // Check for pending batch when authenticated
-  useEffect(() => {
-    if (isAuthenticated) {
-      checkForPendingBatch();
-    }
-  }, [isAuthenticated]);
 
   const checkForPendingBatch = async () => {
     try {
@@ -244,7 +173,7 @@ export default function MetadataScreeningCSCLPage() {
           journal: a.journal,
         })),
         rubrics,
-        promptTemplate: CSCL_SCREENING_PROMPT_TEMPLATE,
+        botId: 'cscl-screening',
       }),
     });
 
@@ -474,26 +403,10 @@ export default function MetadataScreeningCSCLPage() {
     cancelledRef.current = true;
   };
 
-  // Loading state
-  if (isCheckingAuth) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-gray-50 to-gray-100">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Checking authentication...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return <AccessKeyPrompt onValidKey={() => setIsAuthenticated(true)} />;
-  }
-
   const mappingValid = validateColumnMapping(parsedCSV?.headers || [], columnMapping).valid;
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
+    <main className="min-h-screen bg-[#f3f4f1]">
       {/* Resume Dialog */}
       {pendingCheckpoint && (
         <ResumeDialog
@@ -510,10 +423,10 @@ export default function MetadataScreeningCSCLPage() {
         <div className="container mx-auto px-4 py-4 flex justify-between items-center max-w-7xl">
           <div className="flex items-center gap-4">
             <div>
-              <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
+              <h1 className="text-xl font-semibold tracking-tight text-gray-900">
                 AI-Assisted Literature Review Toolset
               </h1>
-              <p className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
+              <p className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.12em] text-gray-500">
                 Step 1: Article Metadata Screening
               </p>
             </div>

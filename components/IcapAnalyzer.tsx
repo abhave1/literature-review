@@ -1,13 +1,13 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import FileUpload from '@/components/FileUpload';
 import AnalysisResults from '@/components/AnalysisResults';
-import AccessKeyPrompt from '@/components/AccessKeyPrompt';
 import MetadataUpload from '@/components/MetadataUpload';
 import { useBatchProcessor } from '@/lib/hooks/use-batch-processor';
 import { MetadataMap, normalizeFilename } from '@/lib/metadata-parser';
-import { DEFAULT_ICAP_SYSTEM_PROMPT } from '@/lib/prompts/default-mxml-prompt';
+import { useCapabilities } from '@/lib/auth/use-capabilities';
 
 interface AnalysisResult {
   fileName: string;
@@ -48,9 +48,10 @@ interface IcapAnalyzerProps {
   showPromptEditor: boolean;
 }
 
-export default function IcapAnalyzer({ showPromptEditor }: IcapAnalyzerProps) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+export default function IcapAnalyzer({ showPromptEditor: internalVersion }: IcapAnalyzerProps) {
+  const botId = internalVersion ? 'icap-internal' : 'icap';
+  const { canManagePrompts } = useCapabilities(botId);
+  const showPromptEditor = canManagePrompts;
   const [files, setFiles] = useState<File[]>([]);
   const [processingStatus, setProcessingStatus] = useState<string>('');
   const [results, setResults] = useState<ApiResponse | null>(null);
@@ -60,7 +61,7 @@ export default function IcapAnalyzer({ showPromptEditor }: IcapAnalyzerProps) {
   const [metadataHeaders, setMetadataHeaders] = useState<string[]>([]);
 
   // System prompt state
-  const [systemPrompt, setSystemPrompt] = useState<string>(DEFAULT_ICAP_SYSTEM_PROMPT);
+  const [systemPrompt, setSystemPrompt] = useState<string>('');
   const [isLoadingPrompt, setIsLoadingPrompt] = useState(true);
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
   const [promptSaveStatus, setPromptSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
@@ -80,42 +81,11 @@ export default function IcapAnalyzer({ showPromptEditor }: IcapAnalyzerProps) {
     persistConfig: false,
   });
 
-  // Check if user has a valid key on mount
+  // The server gate authorizes this page before it mounts.
   useEffect(() => {
-    const storedKey = localStorage.getItem('app_access_key');
-    if (storedKey) {
-      // Validate the stored key
-      fetch('/api/validate-key', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: storedKey }),
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.valid) {
-            setIsAuthenticated(true);
-          } else {
-            localStorage.removeItem('app_access_key');
-          }
-        })
-        .catch(() => {
-          localStorage.removeItem('app_access_key');
-        })
-        .finally(() => {
-          setIsCheckingAuth(false);
-        });
-    } else {
-      setIsCheckingAuth(false);
-    }
+    loadBlobFiles();
+    loadPrompt();
   }, []);
-
-  // Load blob files and prompt when authenticated
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadBlobFiles();
-      loadPrompt();
-    }
-  }, [isAuthenticated]);
 
   const loadBlobFiles = async () => {
     setIsLoadingBlob(true);
@@ -180,8 +150,9 @@ export default function IcapAnalyzer({ showPromptEditor }: IcapAnalyzerProps) {
     }
     setIsSavingPrompt(true);
     try {
-      await fetch('/api/prompt?mode=icap', { method: 'DELETE' });
-      setSystemPrompt(DEFAULT_ICAP_SYSTEM_PROMPT);
+      const response = await fetch('/api/prompt?mode=icap', { method: 'DELETE' });
+      if (!response.ok) throw new Error('Reset denied');
+      await loadPrompt();
       setPromptIsDefault(true);
       setPromptSaveStatus('saved');
       setTimeout(() => setPromptSaveStatus('idle'), 3000);
@@ -386,6 +357,7 @@ export default function IcapAnalyzer({ showPromptEditor }: IcapAnalyzerProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          botId,
           files: [{
             fileName: file.fileName,
             text: file.text,
@@ -393,7 +365,7 @@ export default function IcapAnalyzer({ showPromptEditor }: IcapAnalyzerProps) {
             extractionSuccess: true,
           }],
           ratedAspects: aspects?.trim() || undefined,
-          customSystemPrompt: systemPrompt?.trim() || undefined,
+          customSystemPrompt: canManagePrompts ? systemPrompt?.trim() || undefined : undefined,
         }),
       });
 
@@ -419,57 +391,22 @@ export default function IcapAnalyzer({ showPromptEditor }: IcapAnalyzerProps) {
     }
   };
 
-  // Show loading while checking authentication
-  if (isCheckingAuth) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <svg
-            className="animate-spin h-12 w-12 text-blue-600 mx-auto mb-4"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            />
-          </svg>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show access key prompt if not authenticated
-  if (!isAuthenticated) {
-    return <AccessKeyPrompt onValidKey={() => setIsAuthenticated(true)} />;
-  }
-
   // Show main app if authenticated
   return (
-    <main className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
+    <main className="min-h-screen bg-[#f3f4f1]">
       <div className="container mx-auto px-4 py-12 max-w-6xl">
         {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            PDF Analysis Tool
-          </h1>
-          <p className="text-lg text-gray-600">
-            Upload PDF files for AI-powered analysis with parallel processing
-          </p>
+        <div className="mb-10 flex flex-wrap items-end justify-between gap-4 border-b border-gray-200 pb-6">
+          <div>
+            <p className="flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.14em] text-gray-500"><span aria-hidden="true" className="h-1.5 w-1.5 bg-lime" />ICAP</p>
+            <h1 className="mt-3 text-4xl font-semibold tracking-[-0.035em] text-gray-900">PDF analysis</h1>
+            <p className="mt-2 text-gray-600">Analyze papers with the ICAP framework, several at a time.</p>
+          </div>
+          <Link href="/bots" className="font-mono text-xs uppercase tracking-[0.12em] text-gray-500 transition-colors hover:text-gray-900">All my bots →</Link>
         </div>
 
         {/* ICAP Papers from Storage */}
-        <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8 mb-8">
           <div className="flex justify-between items-center mb-4">
             <div>
               <h2 className="text-2xl font-semibold text-gray-900">
@@ -552,7 +489,7 @@ export default function IcapAnalyzer({ showPromptEditor }: IcapAnalyzerProps) {
         </div>
 
         {/* Rated Aspects Section */}
-        <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8 mb-8">
           <h2 className="text-2xl font-semibold text-gray-900 mb-4">
             Rated Aspects (Optional)
           </h2>
@@ -570,7 +507,7 @@ export default function IcapAnalyzer({ showPromptEditor }: IcapAnalyzerProps) {
 
         {/* System Prompt (Advanced) - only shown when showPromptEditor is true */}
         {showPromptEditor && (
-          <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8 mb-8">
             <div className="border border-gray-200 rounded-lg overflow-hidden">
               <button
                 onClick={() => setShowSystemPrompt(!showSystemPrompt)}
@@ -650,7 +587,7 @@ export default function IcapAnalyzer({ showPromptEditor }: IcapAnalyzerProps) {
         )}
 
         {/* Article Metadata (Optional) */}
-        <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8 mb-8">
           <h2 className="text-2xl font-semibold text-gray-900 mb-2">
             Article Metadata (Optional)
           </h2>
@@ -670,7 +607,7 @@ export default function IcapAnalyzer({ showPromptEditor }: IcapAnalyzerProps) {
 
         {/* Metadata Match Preview */}
         {matchPreview && (
-          <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8 mb-8">
             <h2 className="text-2xl font-semibold text-gray-900 mb-4">
               Metadata Match Preview
             </h2>
@@ -733,7 +670,7 @@ export default function IcapAnalyzer({ showPromptEditor }: IcapAnalyzerProps) {
         )}
 
         {/* Upload Section */}
-        <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8 mb-8">
           <FileUpload onFilesSelected={handleFilesSelected} isProcessing={processor.isProcessing} />
 
           {(files.length > 0 || selectedBlobFiles.size > 0) && !processor.isProcessing && (
@@ -862,7 +799,7 @@ export default function IcapAnalyzer({ showPromptEditor }: IcapAnalyzerProps) {
 
         {/* Results Section */}
         {results && (
-          <div className="bg-white rounded-xl shadow-lg p-8">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8">
             <AnalysisResults
               results={results.results}
               totalFiles={results.totalFiles}
@@ -876,7 +813,7 @@ export default function IcapAnalyzer({ showPromptEditor }: IcapAnalyzerProps) {
         )}
 
         {/* Footer */}
-        <div className="mt-12 text-center text-gray-600 text-sm">
+        <div className="mt-12 text-center font-mono text-[11px] uppercase tracking-[0.1em] text-gray-400">
           <p>Powered by ASU AIML Platform • Client-side PDF parsing for privacy</p>
           <p className="mt-1">Your PDFs are processed in your browser - nothing uploaded until analysis</p>
         </div>

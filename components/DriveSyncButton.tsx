@@ -103,7 +103,7 @@ export default function DriveSyncButton({
                 ? 'bg-green-600 hover:bg-green-700 hover:shadow-lg'
                 : hasError || isCancelled
                   ? 'bg-orange-600 hover:bg-orange-700 hover:shadow-lg'
-                  : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 hover:shadow-xl active:scale-[0.98]'
+                  : 'bg-gray-900 hover:bg-gray-700 active:scale-[0.99]'
             }
           `}
         >
@@ -216,7 +216,7 @@ export default function DriveSyncButton({
             </div>
             <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-300 ease-out"
+                className="h-full bg-lime rounded-full transition-all duration-300 ease-out"
                 style={{ width: `${getProgressPercentage()}%` }}
               />
             </div>
@@ -226,7 +226,7 @@ export default function DriveSyncButton({
         {/* Indeterminate progress for connecting/listing */}
         {(syncStatus === 'connecting' || syncStatus === 'listing') && (
           <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full animate-pulse w-full opacity-60" />
+            <div className="h-full bg-lime rounded-full animate-pulse w-full opacity-60" />
           </div>
         )}
       </div>

@@ -1,4 +1,7 @@
+import { loadPrompt } from '@/lib/prompts/store';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireApiAccess, requireApiFeature } from '@/lib/auth/server';
+import { BOT_ROUTES, type BotId } from '@/lib/auth/access';
 import { asuAimlClient } from '@/lib/asu-aiml-client';
 import { EXCLUSION_HANDLING_INSTRUCTIONS, EXCLUSION_EXAMPLE, DEFAULT_ICAP_SYSTEM_PROMPT, buildSystemPrompt } from '@/lib/prompts/default-mxml-prompt';
 
@@ -32,10 +35,23 @@ interface FileInput {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const botId = body.botId;
+    if (!BOT_ROUTES.some(bot => bot.id === botId) || ['screening', 'cscl-screening'].includes(botId)) {
+      return NextResponse.json({ error: 'Invalid analysis bot' }, { status: 400 });
+    }
+    const denied = await requireApiAccess(request, [botId as BotId]);
+    if (denied) return denied;
     const files: FileInput[] = body.files;
     const ratedAspects: string | undefined = body.ratedAspects;
-    const customSystemPrompt: string | undefined = body.customSystemPrompt;
-    const useMxmlPrompt: boolean = body.useMxmlPrompt || false;
+    if (body.customSystemPrompt !== undefined) {
+      const promptDenied = await requireApiFeature(request, [botId as BotId], 'prompt_access');
+      if (promptDenied) return promptDenied;
+      if (typeof body.customSystemPrompt !== 'string') return NextResponse.json({ error: 'Invalid prompt' }, { status: 400 });
+    }
+    const mode = botId.startsWith('icap') ? 'icap' : botId === 'mxml1' ? 'mxml' : botId;
+    const saved = await loadPrompt(mode);
+    const customSystemPrompt = body.customSystemPrompt?.trim() || saved.systemPrompt;
+    const useMxmlPrompt = !botId.startsWith('icap');
 
     if (!files || files.length === 0) {
       return NextResponse.json(

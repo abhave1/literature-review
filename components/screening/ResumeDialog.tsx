@@ -31,14 +31,14 @@ export default function ResumeDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-[2px]">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-2xl max-w-md w-full mx-4 overflow-hidden">
         {/* Header */}
-        <div className="bg-blue-50 px-6 py-4 border-b border-blue-100">
+        <div className="bg-white px-6 py-4 border-b border-gray-200">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
+            <div className="p-2 bg-gray-900 rounded-lg">
               <svg
-                className="w-6 h-6 text-blue-600"
+                className="w-6 h-6 text-lime"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"

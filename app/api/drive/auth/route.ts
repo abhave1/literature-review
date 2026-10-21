@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireApiAccess } from '@/lib/auth/server';
 import { GoogleDriveClient } from '@/lib/google-drive-client';
 import { cookies } from 'next/headers';
 
@@ -17,6 +18,8 @@ const tokenStorage = new Map<string, {
  * Initiates OAuth2 flow or returns current auth status
  */
 export async function GET(request: NextRequest) {
+  const denied = await requireApiAccess(request, ['mxml1']);
+  if (denied) return denied;
   const searchParams = request.nextUrl.searchParams;
   const action = searchParams.get('action');
 
@@ -205,6 +208,8 @@ export async function GET(request: NextRequest) {
  * Handle token operations (logout, manual token setting)
  */
 export async function POST(request: NextRequest) {
+  const denied = await requireApiAccess(request, ['mxml1']);
+  if (denied) return denied;
   try {
     const body = await request.json();
     const { action, accessToken, refreshToken } = body;

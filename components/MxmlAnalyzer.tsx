@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import AccessKeyPrompt from '@/components/AccessKeyPrompt';
+import { useState, useEffect, useRef } from 'react';
 import AnalysisResults from '@/components/AnalysisResults';
 import FileUpload from '@/components/FileUpload';
 import { useBatchProcessor } from '@/lib/hooks/use-batch-processor';
 import Link from 'next/link';
-import { DEFAULT_MXML_SYSTEM_PROMPT, DEFAULT_ASPECTS } from '@/lib/prompts/default-mxml-prompt';
+import { DEFAULT_ASPECTS } from '@/lib/prompts/aspects';
+import { useCapabilities } from '@/lib/auth/use-capabilities';
+import type { BotId } from '@/lib/auth/access';
 
 interface BlobFile {
   url: string;
@@ -61,6 +62,7 @@ export interface MxmlAnalyzerProps {
   enableLocalPdfAdd?: boolean;
   navLinks?: NavLink[];
   showBetaBadge?: boolean;
+  allowPromptSave?: boolean;
 }
 
 export default function MxmlAnalyzer({
@@ -68,18 +70,19 @@ export default function MxmlAnalyzer({
   subtitle,
   promptMode,
   fileCategories,
-  showUpload = false,
   showJournalType = false,
-  hideSystemPrompt = false,
   ratedAspectsLabel,
   ratedAspectsDescription,
   ratedAspectsPlaceholder,
-  enableLocalPdfAdd = false,
+  enableLocalPdfAdd = true,
   navLinks,
   showBetaBadge = true,
 }: MxmlAnalyzerProps) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const botId = (promptMode === 'mxml' ? 'mxml1' : promptMode) as BotId;
+  const { canManagePrompts, canUpload } = useCapabilities(botId);
+  const hideSystemPrompt = !canManagePrompts;
+  const allowPromptSave = canManagePrompts;
+  const showUpload = canUpload;
   const [filesByCategory, setFilesByCategory] = useState<Record<string, BlobFile[]>>({});
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
 
@@ -102,7 +105,7 @@ export default function MxmlAnalyzer({
   });
 
   // Prompt Inputs
-  const [systemPrompt, setSystemPrompt] = useState<string>(DEFAULT_MXML_SYSTEM_PROMPT);
+  const [systemPrompt, setSystemPrompt] = useState<string>('');
   const [ratedAspects, setRatedAspects] = useState<string>(DEFAULT_ASPECTS);
   const [isLoadingPrompt, setIsLoadingPrompt] = useState(true);
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
@@ -117,37 +120,18 @@ export default function MxmlAnalyzer({
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [uploadError, setUploadError] = useState<string>('');
 
+  const localUrls = useRef<string[]>([]);
+  useEffect(() => () => { localUrls.current.forEach(url => URL.revokeObjectURL(url)); }, []);
+
   // Derived: flat list of all files across categories
   const allFiles = Object.values(filesByCategory).flat();
   const totalFileCount = allFiles.length;
 
-  // 1. Auth Check
+  // The server gate authorizes this page before it mounts.
   useEffect(() => {
-    const storedKey = localStorage.getItem('app_access_key');
-    if (storedKey) {
-      fetch('/api/validate-key', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: storedKey }),
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.valid) setIsAuthenticated(true);
-          else localStorage.removeItem('app_access_key');
-        })
-        .finally(() => setIsCheckingAuth(false));
-    } else {
-      setIsCheckingAuth(false);
-    }
+    loadFiles();
+    loadPrompt();
   }, []);
-
-  // 2. Fetch Files (Once Authenticated)
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadFiles();
-      loadPrompt();
-    }
-  }, [isAuthenticated]);
 
   // Load saved prompt from Vercel Blob
   const loadPrompt = async () => {
@@ -200,9 +184,9 @@ export default function MxmlAnalyzer({
     }
     setIsSavingPrompt(true);
     try {
-      await fetch(`/api/prompt?mode=${promptMode}`, { method: 'DELETE' });
-      setSystemPrompt(DEFAULT_MXML_SYSTEM_PROMPT);
-      setRatedAspects(DEFAULT_ASPECTS);
+      const response = await fetch(`/api/prompt?mode=${promptMode}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Reset denied');
+      await loadPrompt();
       setPromptIsDefault(true);
       setPromptSaveStatus('saved');
       setTimeout(() => setPromptSaveStatus('idle'), 3000);
@@ -350,8 +334,9 @@ export default function MxmlAnalyzer({
             extractionSuccess: true,
           }],
           ratedAspects: aspects?.trim() || undefined,
-          customSystemPrompt: customSystemPrompt?.trim() || undefined,
+          customSystemPrompt: canManagePrompts ? customSystemPrompt?.trim() || undefined : undefined,
           useMxmlPrompt: true,
+          botId: promptMode === 'mxml' ? 'mxml1' : promptMode,
         }),
       });
 
@@ -501,34 +486,20 @@ export default function MxmlAnalyzer({
 
   const isMultiCategory = fileCategories.length > 1;
 
-  // Loading state
-  if (isCheckingAuth) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-gray-500 animate-pulse">Authenticating...</div>
-      </div>
-    );
-  }
-
-  // Auth prompt
-  if (!isAuthenticated) {
-    return <AccessKeyPrompt onValidKey={() => setIsAuthenticated(true)} />;
-  }
-
   // Main UI
   return (
-    <main className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 text-gray-900">
+    <main className="min-h-screen bg-[#f3f4f1] text-gray-900">
 
       {/* Navbar */}
       <div className="bg-white border-b sticky top-0 z-10 shadow-sm backdrop-blur-sm bg-opacity-90">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center max-w-7xl">
           <div className="flex items-center gap-4">
             <div>
-              <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
+              <h1 className="text-xl font-semibold tracking-tight text-gray-900">
                 {title}
               </h1>
               {subtitle && (
-                <p className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
+                <p className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.12em] text-gray-500">
                   {subtitle}
                 </p>
               )}
@@ -551,7 +522,7 @@ export default function MxmlAnalyzer({
               {totalFileCount} Files Available
               {searchQuery && ` \u2022 ${allFilteredFiles.length} Filtered`}
               {' \u2022 '}
-              <span className="text-indigo-600">{selectedFiles.size} Selected</span>
+              <span className="text-gray-900">{selectedFiles.size} Selected</span>
             </div>
           </div>
         </div>
@@ -587,7 +558,7 @@ export default function MxmlAnalyzer({
               {promptSaveStatus === 'error' && (
                 <span className="text-sm text-red-600">Save failed</span>
               )}
-              <button
+              {allowPromptSave && <><button
                 onClick={resetPrompt}
                 disabled={isSavingPrompt || processor.isProcessing || promptIsDefault}
                 className={`
@@ -610,7 +581,7 @@ export default function MxmlAnalyzer({
                 `}
               >
                 {isSavingPrompt ? 'Saving...' : (hideSystemPrompt ? 'Save Aspects' : 'Save Prompt')}
-              </button>
+              </button></>}
             </div>
           </div>
 
@@ -697,7 +668,7 @@ export default function MxmlAnalyzer({
                 </svg>
                 Add Local PDFs (One-time analysis)
               </h2>
-              <p className="text-sm text-gray-500">Drag and drop PDFs from your computer to use in this analysis session only. These files are <strong>not saved</strong> to the CSCL library. Use the &quot;Upload&quot; section below to permanently add files.</p>
+              <p className="text-sm text-gray-500">Drag and drop PDFs from your computer to use in this analysis session only. These files are <strong>not saved</strong> to the shared library. Extracted text is sent for analysis when you run the bot.</p>
             </div>
             <div className="p-6">
               <FileUpload
@@ -712,6 +683,8 @@ export default function MxmlAnalyzer({
                     journalType: 'Local Upload',
                     _localFile: f,
                   } as BlobFile & { _localFile: File }));
+
+                  localUrls.current.push(...newBlobFiles.map(file => file.url));
 
                   // Add to the first category's file list
                   const firstCatKey = fileCategories[0]?.key;
@@ -784,7 +757,7 @@ export default function MxmlAnalyzer({
                           px-6 py-2 rounded-lg font-medium text-white transition-all
                           ${uploadingCategory !== null
                             ? 'bg-gray-400 cursor-not-allowed'
-                            : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700'}
+                            : 'bg-gray-900 hover:bg-gray-700'}
                         `}
                       >
                         {isCatUploading ? (
@@ -952,10 +925,10 @@ export default function MxmlAnalyzer({
             onClick={handleAnalyze}
             disabled={processor.isProcessing || selectedFiles.size === 0}
             className={`
-              relative px-8 py-4 rounded-xl font-bold text-white text-lg shadow-xl transition-all transform
+              relative px-8 py-4 rounded-lg font-semibold text-white text-base shadow-none transition-all transform
               ${processor.isProcessing || selectedFiles.size === 0
                 ? 'bg-gray-400 cursor-not-allowed transform-none shadow-none'
-                : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 hover:scale-105 hover:shadow-2xl active:scale-95'}
+                : 'bg-gray-900 hover:bg-gray-700 active:scale-[0.99]'}
             `}
           >
             {processor.isProcessing ? (

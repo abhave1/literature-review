@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireApiAccess } from '@/lib/auth/server';
 import { list } from '@vercel/blob';
 import { cookies } from 'next/headers';
 import { GoogleDriveClient } from '@/lib/google-drive-client';
@@ -49,6 +50,8 @@ interface StatusResponse {
  * Returns comprehensive status of Drive sync system
  */
 export async function GET(request: NextRequest) {
+  const denied = await requireApiAccess(request, ['mxml1']);
+  if (denied) return denied;
   const searchParams = request.nextUrl.searchParams;
   const testFolderId = searchParams.get('folderId');
   const includeFileCount = searchParams.get('includeFileCount') === 'true';
