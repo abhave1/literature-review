@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { put } from '@vercel/blob';
 import { requireApiFeature } from '@/lib/auth/server';
-import { uploadWriters } from '@/lib/auth/access';
+import { libraryFeature, uploadWriters } from '@/lib/auth/access';
 
 export const runtime = 'nodejs';
 
@@ -13,6 +13,16 @@ export async function POST(request: NextRequest) {
   const denied = await requireApiFeature(request, ['mxml1', 'mxml4', 'mxml4-open', 'mxml4-internal', 'mxml4-open-internal', 'cscl-close', 'cscl-open'], 'permanent_upload');
   if (denied) return denied;
   try {
+    const formData = await request.formData();
+    const files = formData.getAll('files') as File[];
+    const prefix = (formData.get('prefix') as string) || 'mxml-pdfs/';
+    const prefixDenied = await requireApiFeature(request, uploadWriters(prefix), 'permanent_upload');
+    if (prefixDenied) return prefixDenied;
+    const library = libraryFeature(prefix);
+    const libraryDenied = library && await requireApiFeature(request, uploadWriters(prefix), library);
+    if (libraryDenied) return libraryDenied;
+
+    // Authorize before reporting configuration problems.
     // Use the MXML token for uploading to mxml-pdfs folder
     const token = process.env.BLOB_MXML_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN;
     if (!token) {
@@ -21,12 +31,6 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
-
-    const formData = await request.formData();
-    const files = formData.getAll('files') as File[];
-    const prefix = (formData.get('prefix') as string) || 'mxml-pdfs/';
-    const prefixDenied = await requireApiFeature(request, uploadWriters(prefix), 'permanent_upload');
-    if (prefixDenied) return prefixDenied;
 
     if (!files || files.length === 0) {
       return NextResponse.json(

@@ -1,8 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/auth/server';
+import { getAccount, requireAdmin } from '@/lib/auth/server';
+import { deleteUser } from '@/lib/auth/delete-user';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { AdminSnapshot } from '@/lib/auth/admin-types';
+
+export async function DELETE(request: NextRequest) {
+  return deleteUser(request, {
+    getActor: getAccount,
+    getTarget: async id => {
+      const session = await createSupabaseServerClient();
+      const { data, error } = await session.rpc('admin_access_snapshot');
+      if (error || !data) throw new Error('Could not verify user');
+      return (data as AdminSnapshot).users.find(user => user.id === id);
+    },
+    deleteAccount: async id => {
+      const admin = createSupabaseAdminClient();
+      if (!admin) throw new Error('User management is not configured');
+      // Hard deletion cascades through user_roles and its dependent access rows.
+      // Shared research files are not deleted by this operation.
+      const { error } = await admin.auth.admin.deleteUser(id, false);
+      if (error) throw error;
+    },
+  });
+}
 
 export async function POST(request: NextRequest) {
   // Authorize using the caller's verified session before using privileged credentials.

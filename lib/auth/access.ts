@@ -86,6 +86,12 @@ export function folderReaders(folder: string): BotId[] {
   }
 }
 
+export const LIBRARIES = ['mxml', 'icap', 'mxml4-measurement', 'mxml4-nonmeasurement', 'cscl-lab'] as const;
+// Libraries beyond the bot's own need a per-user feature; the server enforces it on list and upload.
+export function libraryFeature(folder: string): 'nonmeasurement_library' | undefined {
+  return folder.replace(/\/$/, '') === 'mxml4-nonmeasurement' ? 'nonmeasurement_library' : undefined;
+}
+
 export function uploadWriters(prefix: string): BotId[] {
   switch (prefix) {
     case 'mxml-pdfs/': return ['mxml1'];

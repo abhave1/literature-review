@@ -1,13 +1,13 @@
 'use client';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import styles from './admin.module.css';
+import { useState, type FormEvent } from 'react';
+import Modal from '@/components/ui/Modal';
+import Button from '@/components/ui/Button';
+import TextField from '@/components/ui/TextField';
 
 export default function AddUserDialog({ onClose, onAdded }: {onClose:()=>void;onAdded:(userId:string,existing:boolean)=>Promise<void>}) {
-  const dialog = useRef<HTMLDialogElement>(null);
   const [email,setEmail] = useState('');
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState('');
-  useEffect(() => {dialog.current?.showModal();}, []);
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError('');
     try {
@@ -18,13 +18,11 @@ export default function AddUserDialog({ onClose, onAdded }: {onClose:()=>void;on
       catch { throw new Error('The account is available, but the list could not refresh. Close this form and reload the page.'); }
     } catch (cause) {setError(cause instanceof Error ? cause.message : 'Could not add user.');setBusy(false);}
   }
-  return <dialog ref={dialog} className={styles.dialog} aria-labelledby="add-user-title" onCancel={event=>{event.preventDefault();if(!busy)onClose();}}>
-    <form onSubmit={submit}>
-      <div className={styles.dialogHeader}><div><h2 id="add-user-title">Add a user</h2><p>Create an account, then choose their access.</p></div><button type="button" disabled={busy} onClick={onClose} aria-label="Close add user">×</button></div>
-      <label className={styles.emailField}>Google account email<input autoFocus type="email" autoComplete="off" placeholder="name@university.edu" required maxLength={254} value={email} disabled={busy} onChange={event=>setEmail(event.target.value)}/></label>
-      <p className={styles.dialogHelp}>They’ll sign in with Google using this email. No invitation email is sent. Projects and bots stay blocked until you assign them.</p>
-      {error && <p className={styles.error} role="alert">{error}</p>}
-      <div className={styles.dialogActions}><button type="button" disabled={busy} className={styles.secondary} onClick={onClose}>Cancel</button><button type="submit" disabled={busy} className={styles.primary}>{busy ? 'Adding user…' : 'Add user'}</button></div>
-    </form>
-  </dialog>;
+  return <Modal title="Add a user" description="Create an account, then choose their access." busy={busy} onClose={onClose} onSubmit={submit}
+    icon={<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/><circle cx="8.5" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>}
+    footer={<><Button disabled={busy} onClick={onClose}>Cancel</Button><Button type="submit" variant="primary" disabled={busy}>{busy ? 'Adding user…' : 'Add user'}</Button></>}>
+    <TextField label="Google account email" autoFocus type="email" autoComplete="off" placeholder="name@university.edu" required maxLength={254} value={email} disabled={busy} onChange={event=>setEmail(event.target.value)}/>
+    <p className="text-[13px] leading-relaxed text-gray-500">They’ll sign in with Google using this email. No invitation email is sent. Projects and bots stay blocked until you assign them.</p>
+    {error && <p role="alert" className="rounded-lg bg-red-50 px-3.5 py-2.5 text-[13px] text-red-800">{error}</p>}
+  </Modal>;
 }

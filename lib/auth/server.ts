@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { allowedRoutes, hasAccess, projectForBot, type BotId } from './access';
+import { allowedRoutes, folderReaders, hasAccess, libraryFeature, projectForBot, type BotId } from './access';
 
 export async function getAccount() {
   const supabase = await createSupabaseServerClient();
@@ -41,7 +41,7 @@ export async function requireApiAccess(request: NextRequest, bots: readonly BotI
 }
 
 export type Account = NonNullable<Awaited<ReturnType<typeof getAccount>>>;
-export type FeatureCode = 'prompt_access' | 'permanent_upload';
+export type FeatureCode = 'prompt_access' | 'permanent_upload' | 'nonmeasurement_library';
 
 export function canUseFeature(account: Account, bots: readonly BotId[], feature: FeatureCode): boolean {
   if (feature === 'prompt_access' && !account.isAdmin) return false;
@@ -73,4 +73,16 @@ export async function requireAdmin(request: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'Permission check unavailable' }, { status: 503 });
   }
+}
+
+// A library is readable with access to one of its bots, plus its feature when it has one.
+export function canReadLibrary(account: Account, folder: string): boolean {
+  const bots = folderReaders(folder);
+  const feature = libraryFeature(folder);
+  return hasAccess(account.grants, bots) && (!feature || canUseFeature(account, bots, feature));
+}
+
+export async function requireApiLibrary(request: NextRequest, folder: string) {
+  const feature = libraryFeature(folder);
+  return feature ? requireApiFeature(request, folderReaders(folder), feature) : requireApiAccess(request, folderReaders(folder));
 }

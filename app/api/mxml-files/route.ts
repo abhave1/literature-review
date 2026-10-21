@@ -1,6 +1,5 @@
 import { list } from '@vercel/blob';
-import { requireApiAccess } from '@/lib/auth/server';
-import { folderReaders } from '@/lib/auth/access';
+import { requireApiLibrary } from '@/lib/auth/server';
 import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'edge';
@@ -19,7 +18,7 @@ export async function GET(request: NextRequest) {
     // Get folder from query param, default to 'mxml'
     const searchParams = request.nextUrl.searchParams;
     const folderKey = searchParams.get('folder') || 'mxml';
-    const denied = await requireApiAccess(request, folderReaders(folderKey));
+    const denied = await requireApiLibrary(request, folderKey);
     if (denied) return denied;
     const folderConfig = FOLDERS[folderKey];
     const prefix = folderConfig.prefix;

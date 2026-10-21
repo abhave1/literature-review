@@ -75,6 +75,7 @@ test('server gate validates sessions and current grants with Supabase', async t 
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://auth-test.supabase.co';
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'test-publishable';
     assert.equal((await proxy(request('/login'))).status, 200);
+    assert.equal((await proxy(request('/home'))).status, 200);
     for (const bot of BOTS) {
       const result = await proxy(request(bot.path));
       assert.equal(result.status, 307);

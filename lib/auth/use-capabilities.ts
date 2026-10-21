@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import type { BotId } from './access';
-const NONE = { canManagePrompts: false, canUpload: false };
+const NONE = { canManagePrompts: false, canUpload: false, libraries: [] as string[], loaded: false };
 export function useCapabilities(bot: BotId) {
   const [capabilities, setCapabilities] = useState(NONE);
   useEffect(() => {
@@ -9,8 +9,9 @@ export function useCapabilities(bot: BotId) {
     setCapabilities(NONE);
     fetch(`/api/capabilities?bot=${encodeURIComponent(bot)}`, { signal: controller.signal, cache: 'no-store' })
       .then(async response => { if (!response.ok) throw new Error('Access unavailable'); return response.json(); })
-      .then(data => setCapabilities({ canManagePrompts: data.canManagePrompts === true, canUpload: data.canUpload === true }))
-      .catch(() => { if (!controller.signal.aborted) setCapabilities(NONE); });
+      .then(data => setCapabilities({ canManagePrompts: data.canManagePrompts === true, canUpload: data.canUpload === true,
+        libraries: Array.isArray(data.libraries) ? data.libraries : [], loaded: true }))
+      .catch(() => { if (!controller.signal.aborted) setCapabilities({ ...NONE, loaded: true }); });
     return () => controller.abort();
   }, [bot]);
   return capabilities;

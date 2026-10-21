@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import AnalysisResults from '@/components/AnalysisResults';
 import FileUpload from '@/components/FileUpload';
 import { useBatchProcessor } from '@/lib/hooks/use-batch-processor';
@@ -69,7 +69,7 @@ export default function MxmlAnalyzer({
   title,
   subtitle,
   promptMode,
-  fileCategories,
+  fileCategories: allCategories,
   showJournalType = false,
   ratedAspectsLabel,
   ratedAspectsDescription,
@@ -79,11 +79,15 @@ export default function MxmlAnalyzer({
   showBetaBadge = true,
 }: MxmlAnalyzerProps) {
   const botId = (promptMode === 'mxml' ? 'mxml1' : promptMode) as BotId;
-  const { canManagePrompts, canUpload } = useCapabilities(botId);
+  const { canManagePrompts, canUpload, libraries, loaded: capabilitiesLoaded } = useCapabilities(botId);
+  // Only the libraries the server says this user may read; the APIs enforce the same rule.
+  const libraryKey = libraries.join(',');
+  const fileCategories = useMemo(() => allCategories.filter(cat => libraries.includes(cat.folderKey)), [allCategories, libraryKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const hideSystemPrompt = !canManagePrompts;
   const allowPromptSave = canManagePrompts;
   const showUpload = canUpload;
   const [filesByCategory, setFilesByCategory] = useState<Record<string, BlobFile[]>>({});
+  const [temporaryFiles, setTemporaryFiles] = useState<(BlobFile & { source: File })[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
 
   // Selection state
@@ -123,15 +127,18 @@ export default function MxmlAnalyzer({
   const localUrls = useRef<string[]>([]);
   useEffect(() => () => { localUrls.current.forEach(url => URL.revokeObjectURL(url)); }, []);
 
-  // Derived: flat list of all files across categories
-  const allFiles = Object.values(filesByCategory).flat();
+  // Shared libraries and session uploads have separate ownership and lifetimes.
+  const sharedFiles = Object.values(filesByCategory).flat();
+  const allFiles = [...sharedFiles, ...temporaryFiles];
   const totalFileCount = allFiles.length;
 
   // The server gate authorizes this page before it mounts.
   useEffect(() => {
-    loadFiles();
     loadPrompt();
   }, []);
+  useEffect(() => {
+    if (capabilitiesLoaded) loadFiles();
+  }, [capabilitiesLoaded, libraryKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load saved prompt from Vercel Blob
   const loadPrompt = async () => {
@@ -243,6 +250,32 @@ export default function MxmlAnalyzer({
   const allFilteredFiles = allFiles.filter(file =>
     file.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+  const filteredSharedFiles = sharedFiles.filter(file => file.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredTemporaryFiles = temporaryFiles.filter(file => file.name.toLowerCase().includes(searchQuery.toLowerCase()));
+
+  // FileUpload reports its complete current selection, including removals.
+  const updateTemporaryFiles = (files: File[]) => {
+    const nextFiles = files.map(source => temporaryFiles.find(file => file.source === source) ?? {
+      source,
+      url: URL.createObjectURL(source),
+      pathname: source.name,
+      name: source.name,
+      size: source.size,
+      uploadedAt: new Date().toISOString(),
+      journalType: 'Local Upload',
+    });
+    const retainedUrls = new Set(nextFiles.map(file => file.url));
+    const removed = temporaryFiles.filter(file => !retainedUrls.has(file.url));
+    removed.forEach(file => URL.revokeObjectURL(file.url));
+    localUrls.current = nextFiles.map(file => file.url);
+    setTemporaryFiles(nextFiles);
+    setSelectedFiles(previous => {
+      const next = new Set(previous);
+      removed.forEach(file => next.delete(file.url));
+      nextFiles.filter(file => !temporaryFiles.some(old => old.url === file.url)).forEach(file => next.add(file.url));
+      return next;
+    });
+  };
 
   // Select all for a specific category
   const selectAllForCategory = (categoryKey: string) => {
@@ -672,35 +705,7 @@ export default function MxmlAnalyzer({
             </div>
             <div className="p-6">
               <FileUpload
-                onFilesSelected={(newFiles) => {
-                  // Add local files as blob-like entries so they integrate with existing selection
-                  const newBlobFiles: BlobFile[] = newFiles.map(f => ({
-                    url: URL.createObjectURL(f),
-                    pathname: f.name,
-                    size: f.size,
-                    uploadedAt: new Date().toISOString(),
-                    name: f.name,
-                    journalType: 'Local Upload',
-                    _localFile: f,
-                  } as BlobFile & { _localFile: File }));
-
-                  localUrls.current.push(...newBlobFiles.map(file => file.url));
-
-                  // Add to the first category's file list
-                  const firstCatKey = fileCategories[0]?.key;
-                  if (firstCatKey) {
-                    setFilesByCategory(prev => ({
-                      ...prev,
-                      [firstCatKey]: [...(prev[firstCatKey] || []), ...newBlobFiles],
-                    }));
-                    // Auto-select the new files
-                    setSelectedFiles(prev => {
-                      const next = new Set(prev);
-                      newBlobFiles.forEach(f => next.add(f.url));
-                      return next;
-                    });
-                  }
-                }}
+                onFilesSelected={updateTemporaryFiles}
                 isProcessing={processor.isProcessing}
               />
             </div>
@@ -803,7 +808,7 @@ export default function MxmlAnalyzer({
           <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
             <div>
               <h2 className="text-lg font-semibold text-gray-800">{showUpload ? '2' : '2'}. Select Files</h2>
-              <p className="text-sm text-gray-500">Choose documents from the Vercel Blob storage.</p>
+              <p className="text-sm text-gray-500">Choose shared-library papers or your temporary uploads for analysis.</p>
             </div>
             {!isMultiCategory && (
               <button
@@ -852,6 +857,16 @@ export default function MxmlAnalyzer({
               )}
             </div>
 
+            {temporaryFiles.length > 0 && (
+              <section aria-label="Your uploads — this session only" className="mb-6 border border-gray-200 rounded-lg overflow-hidden">
+                <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                  <h3 className="text-sm font-semibold text-gray-700">Your uploads — this session only</h3>
+                  <p className="text-xs text-gray-500 mt-1">{temporaryFiles.length} file{temporaryFiles.length === 1 ? '' : 's'} · Not saved to the shared library</p>
+                </div>
+                <div className="p-4">{filteredTemporaryFiles.length ? renderFileGrid(filteredTemporaryFiles) : <p className="text-sm text-gray-400">No uploads match your search.</p>}</div>
+              </section>
+            )}
+
             {isLoadingFiles ? (
               <div className="flex flex-col items-center justify-center py-12 text-gray-500">
                 <svg className="animate-spin h-8 w-8 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24">
@@ -860,10 +875,10 @@ export default function MxmlAnalyzer({
                 </svg>
                 <p>Loading files...</p>
               </div>
-            ) : totalFileCount === 0 ? (
+            ) : sharedFiles.length === 0 ? (
               <div className="text-center py-12 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
-                <p className="text-gray-500 font-medium">No files found.</p>
-                <p className="text-sm text-gray-400 mt-1">Run the upload script to add documents.</p>
+                <p className="text-gray-500 font-medium">No papers in the shared library yet.</p>
+                <p className="text-sm text-gray-400 mt-1">{showUpload ? 'Upload PDFs above to add them here.' : 'An admin can add papers for this bot.'}</p>
               </div>
             ) : isMultiCategory ? (
               /* Multi-category: render sections per category */
@@ -907,13 +922,13 @@ export default function MxmlAnalyzer({
               </div>
             ) : (
               /* Single category: flat grid */
-              allFilteredFiles.length === 0 ? (
+              filteredSharedFiles.length === 0 ? (
                 <div className="text-center py-12 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50">
                   <p className="text-gray-500 font-medium">No files match your search.</p>
                   <p className="text-sm text-gray-400 mt-1">Try a different search term.</p>
                 </div>
               ) : (
-                renderFileGrid(allFilteredFiles)
+                renderFileGrid(filteredSharedFiles)
               )
             )}
           </div>

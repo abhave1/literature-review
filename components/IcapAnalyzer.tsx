@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import FileUpload from '@/components/FileUpload';
 import AnalysisResults from '@/components/AnalysisResults';
@@ -402,7 +401,6 @@ export default function IcapAnalyzer({ showPromptEditor: internalVersion }: Icap
             <h1 className="mt-3 text-4xl font-semibold tracking-[-0.035em] text-gray-900">PDF analysis</h1>
             <p className="mt-2 text-gray-600">Analyze papers with the ICAP framework, several at a time.</p>
           </div>
-          <Link href="/bots" className="font-mono text-xs uppercase tracking-[0.12em] text-gray-500 transition-colors hover:text-gray-900">All my bots →</Link>
         </div>
 
         {/* ICAP Papers from Storage */}

@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 export default async function AdminPage() {
   const account = await getAccount();
   if (!account) redirect('/login?next=/admin');
-  if (!account.isAdmin) redirect('/bots?denied=1');
+  if (!account.isAdmin) redirect('/bots');
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc('admin_access_snapshot');
   if (error) return <StatusCard code="Admin" title="Access management unavailable">

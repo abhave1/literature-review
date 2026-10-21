@@ -6,7 +6,7 @@ import { supabaseConfig } from '@/lib/supabase/config';
 export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
   // Exact public routes only. All other pages AND APIs fail closed.
-  if (['/login', '/auth/login', '/auth/callback', '/auth/signout'].includes(path)) {
+  if (['/home', '/login', '/auth/login', '/auth/callback', '/auth/signout'].includes(path)) {
     return NextResponse.next();
   }
   const api = path.startsWith('/api/');
@@ -41,19 +41,19 @@ export async function proxy(request: NextRequest) {
     if (api || path === '/bots' || path === '/access-required') return finish(response);
     if (path === '/admin') {
       const { data: admin, error: adminError } = await supabase.rpc('is_admin');
-      if (adminError || admin !== true) return deny(403, 'Admin required', '/bots?denied=1');
+      if (adminError || admin !== true) return deny(403, 'Admin required', '/bots');
       return finish(response);
     }
     const bot = botForPath(path);
-    if (!bot) return deny(403, 'Access denied', '/bots?denied=1');
+    if (!bot) return deny(403, 'Access denied', '/bots');
     if (isInternalRoute(bot)) {
       const { data: admin, error: adminError } = await supabase.rpc('is_admin');
-      if (adminError || admin !== true) return deny(403, 'Admin required', '/bots?denied=1');
+      if (adminError || admin !== true) return deny(403, 'Admin required', '/bots');
     }
     const { data, error: accessError } = await supabase.from('user_bot_access')
       .select('bot_key').eq('user_id', user.id).eq('bot_key', canonicalBotId(bot)).maybeSingle();
     if (accessError) return deny(503, 'Access check unavailable', '/login?error=unavailable');
-    if (!data) return deny(403, 'Access not granted', '/bots?denied=1');
+    if (!data) return deny(403, 'Access not granted', '/bots');
     return finish(response);
   } catch {
     return deny(503, 'Authentication unavailable', '/login?error=unavailable');

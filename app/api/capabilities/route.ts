@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { BOT_ROUTES, type BotId } from '@/lib/auth/access';
-import { getAccount, canUseFeature } from '@/lib/auth/server';
+import { BOT_ROUTES, LIBRARIES, type BotId } from '@/lib/auth/access';
+import { getAccount, canReadLibrary, canUseFeature } from '@/lib/auth/server';
 
 export async function GET(request: NextRequest) {
   const bot = request.nextUrl.searchParams.get('bot') as BotId;
@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       canManagePrompts: canUseFeature(account, [bot], 'prompt_access'),
       canUpload: canUseFeature(account, [bot], 'permanent_upload'),
+      libraries: LIBRARIES.filter(folder => canReadLibrary(account, folder)),
     }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch {
     return NextResponse.json({ error: 'Permission check unavailable' }, { status: 503 });
