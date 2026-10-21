@@ -7,7 +7,7 @@ import styles from './workspace.module.css';
 export const dynamic = 'force-dynamic';
 
 const projectDescriptions: Record<string, string> = {
-  MxML: 'Machine learning in measurement',
+  MxML: 'Explore machine learning and AI in measurement research papers.',
   ICAP: 'Cognitive engagement research',
   CSCL: 'Computer-supported collaborative learning',
 };
@@ -47,7 +47,7 @@ export default async function BotsPage() {
           const features = [canUseFeature(account, ids, 'nonmeasurement_library') && 'Non-measurement Journals', canUseFeature(account, ids, 'permanent_upload') && 'PDF uploads', canUseFeature(account, ids, 'prompt_access') && 'System prompts'].filter(Boolean) as string[];
           return <section className={styles.project} id={`project-${project.name}`} key={project.name} aria-labelledby={`title-${project.name}`}>
           <header className={styles.projectHeader}>
-            <h2 id={`title-${project.name}`}>{project.name}<span>{projectDescriptions[project.name]}</span></h2>
+            <h2 id={`title-${project.name}`}>{project.name === 'MxML' ? 'MxML+' : project.name}<span>{projectDescriptions[project.name]}</span></h2>
             {features.length > 0 && <ul className={styles.features} aria-label={`Your ${project.name} features`}>{features.map(feature => <li key={feature}>{feature}</li>)}</ul>}
           </header>
           <div className={styles.botGrid}>{project.bots.map(bot => {
