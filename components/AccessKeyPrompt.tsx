@@ -48,7 +48,7 @@ export default function AccessKeyPrompt({ onValidKey }: AccessKeyPromptProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#f3f4f1] flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-lg p-8 max-w-md w-full">
         {/* Icon */}
         <div className="flex justify-center mb-6">

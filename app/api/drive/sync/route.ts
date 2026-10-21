@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireApiAccess, requireApiFeature } from '@/lib/auth/server';
 import { put, list } from '@vercel/blob';
 import { cookies } from 'next/headers';
 import { GoogleDriveClient, DriveFile } from '@/lib/google-drive-client';
@@ -29,6 +30,8 @@ const syncStateStorage = new Map<string, SyncState>();
  * Start a sync operation from Google Drive to Vercel Blob
  */
 export async function POST(request: NextRequest) {
+  const denied = await requireApiFeature(request, ['mxml1'], 'permanent_upload');
+  if (denied) return denied;
   const encoder = new TextEncoder();
 
   try {
@@ -303,6 +306,8 @@ export async function POST(request: NextRequest) {
  * Get sync status or list sync history
  */
 export async function GET(request: NextRequest) {
+  const denied = await requireApiAccess(request, ['mxml1']);
+  if (denied) return denied;
   const searchParams = request.nextUrl.searchParams;
   const syncId = searchParams.get('id');
 

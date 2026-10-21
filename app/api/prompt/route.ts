@@ -1,40 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { put, list, del } from '@vercel/blob';
-import { DEFAULT_MXML_SYSTEM_PROMPT, DEFAULT_ASPECTS, DEFAULT_ICAP_SYSTEM_PROMPT, DEFAULT_MXML_OPEN_SYSTEM_PROMPT, DEFAULT_OPEN_ASPECTS, DEFAULT_CSCL_CLOSE_SYSTEM_PROMPT, DEFAULT_CSCL_OPEN_SYSTEM_PROMPT } from '@/lib/prompts/default-mxml-prompt';
+import { requireApiAccess, requireApiFeature, getAccount, canUseFeature } from '@/lib/auth/server';
+import { promptReaders, promptWriters } from '@/lib/auth/access';
+import { getConfigForMode, loadPrompt, type SavedPrompt } from '@/lib/prompts/store';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-// Blob paths for storing prompt configs
-const PROMPT_BLOB_PATH = 'config/mxml-prompt.json';
-const ICAP_PROMPT_BLOB_PATH = 'config/icap-prompt.json';
-
-function getConfigForMode(mode: string) {
-  // MxML modes use BLOB_MXML_READ_WRITE_TOKEN (mxml-store)
-  // ICAP mode uses BLOB_READ_WRITE_TOKEN (icap store)
-  if (mode === 'icap') {
-    return { blobPath: ICAP_PROMPT_BLOB_PATH, defaultPrompt: DEFAULT_ICAP_SYSTEM_PROMPT, defaultAspects: '', token: process.env.BLOB_READ_WRITE_TOKEN };
-  }
-  if (mode === 'mxml4') {
-    return { blobPath: 'config/mxml4-prompt.json', defaultPrompt: DEFAULT_MXML_SYSTEM_PROMPT, defaultAspects: DEFAULT_ASPECTS, token: process.env.BLOB_MXML_READ_WRITE_TOKEN };
-  }
-  if (mode === 'mxml4-open') {
-    return { blobPath: 'config/mxml4-open-prompt.json', defaultPrompt: DEFAULT_MXML_OPEN_SYSTEM_PROMPT, defaultAspects: DEFAULT_OPEN_ASPECTS, token: process.env.BLOB_MXML_READ_WRITE_TOKEN };
-  }
-  if (mode === 'cscl-close') {
-    return { blobPath: 'config/cscl-close-prompt.json', defaultPrompt: DEFAULT_CSCL_CLOSE_SYSTEM_PROMPT, defaultAspects: DEFAULT_OPEN_ASPECTS, token: process.env.BLOB_MXML_READ_WRITE_TOKEN };
-  }
-  if (mode === 'cscl-open') {
-    return { blobPath: 'config/cscl-open-prompt.json', defaultPrompt: DEFAULT_CSCL_OPEN_SYSTEM_PROMPT, defaultAspects: DEFAULT_OPEN_ASPECTS, token: process.env.BLOB_MXML_READ_WRITE_TOKEN };
-  }
-  return { blobPath: PROMPT_BLOB_PATH, defaultPrompt: DEFAULT_MXML_SYSTEM_PROMPT, defaultAspects: DEFAULT_ASPECTS, token: process.env.BLOB_MXML_READ_WRITE_TOKEN };
-}
-
-export interface SavedPrompt {
-  systemPrompt: string;
-  ratedAspects: string;
-  updatedAt: string;
-}
 
 /**
  * GET /api/prompt
@@ -42,58 +13,19 @@ export interface SavedPrompt {
  * Returns defaults if not found
  */
 export async function GET(request: NextRequest) {
+  const mode = request.nextUrl.searchParams.get('mode') || 'mxml';
+  const bots = promptReaders(mode);
+  const denied = await requireApiAccess(request, bots);
+  if (denied) return denied;
   try {
-    const mode = request.nextUrl.searchParams.get('mode') || 'mxml';
-    const { blobPath, defaultPrompt, defaultAspects, token } = getConfigForMode(mode);
-    const blobFilename = blobPath.split('/').pop()!;
-
-    // List blobs to find the config file
-    const { blobs } = await list({ prefix: 'config/', token });
-    console.log('Found blobs:', blobs.map(b => ({ pathname: b.pathname, url: b.url })));
-
-    // Find the config blob - check both exact match and ends-with
-    const configBlob = blobs.find(b =>
-      b.pathname === blobPath ||
-      b.pathname.endsWith(blobFilename)
-    );
-
-    console.log(`Config blob found for ${mode}:`, configBlob ? 'yes' : 'no');
-
-    if (!configBlob) {
-      // No saved config, return defaults
-      return NextResponse.json({
-        systemPrompt: defaultPrompt,
-        ratedAspects: defaultAspects,
-        isDefault: true,
-      }, {
-        headers: { 'Cache-Control': 'no-store, max-age=0' },
-      });
-    }
-
-    // Fetch the config from blob (with cache bust)
-    const response = await fetch(`${configBlob.url}?t=${Date.now()}`, { cache: 'no-store' });
-    const savedConfig: SavedPrompt = await response.json();
-    console.log('Loaded config:', savedConfig.updatedAt);
-
-    return NextResponse.json({
-      systemPrompt: savedConfig.systemPrompt || defaultPrompt,
-      ratedAspects: savedConfig.ratedAspects || defaultAspects,
-      isDefault: false,
-      updatedAt: savedConfig.updatedAt,
-    }, {
-      headers: { 'Cache-Control': 'no-store, max-age=0' },
-    });
-  } catch (error) {
-    const mode = request.nextUrl.searchParams.get('mode') || 'mxml';
-    const { defaultPrompt, defaultAspects } = getConfigForMode(mode);
-    console.error('Failed to load prompt from Blob:', error);
-    // Return defaults on error
-    return NextResponse.json({
-      systemPrompt: defaultPrompt,
-      ratedAspects: defaultAspects,
-      isDefault: true,
-      error: 'Failed to load from storage, using defaults',
-    });
+    const account = await getAccount();
+    const config = await loadPrompt(mode);
+    const { systemPrompt, ...safeConfig } = config;
+    const canManagePrompts = !!account && canUseFeature(account, bots, 'prompt_access');
+    return NextResponse.json({ ...safeConfig, ...(canManagePrompts ? { systemPrompt } : {}) },
+      { headers: { 'Cache-Control': 'private, no-store' } });
+  } catch {
+    return NextResponse.json({ error: 'Prompt configuration unavailable' }, { status: 503 });
   }
 }
 
@@ -106,6 +38,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { systemPrompt, ratedAspects, mode } = body;
+    const denied = await requireApiFeature(request, promptWriters(mode || 'mxml'), 'prompt_access');
+    if (denied) return denied;
     const { blobPath, token } = getConfigForMode(mode || 'mxml');
     const blobFilename = blobPath.split('/').pop()!;
 
@@ -159,6 +93,8 @@ export async function POST(request: NextRequest) {
  * Resets the prompt to defaults by deleting from Blob
  */
 export async function DELETE(request: NextRequest) {
+  const denied = await requireApiFeature(request, promptWriters(request.nextUrl.searchParams.get('mode') || 'mxml'), 'prompt_access');
+  if (denied) return denied;
   try {
     const mode = request.nextUrl.searchParams.get('mode') || 'mxml';
     const { blobPath, token } = getConfigForMode(mode);

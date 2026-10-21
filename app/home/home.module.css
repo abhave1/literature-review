@@ -1,0 +1,79 @@
+.page {
+  --bg: #f3f4f1; --panel: #ffffff; --line: #e1e4de; --line-hi: #cdd2c9;
+  --text: #0e1013; --muted: #5d636c; --dim: #8a9099; --accent: #b6ea3c; --accent-ink: #3f5f06;
+  --mono: var(--font-geist-mono), ui-monospace, monospace;
+  --pad: clamp(16px, 2.5vw, 40px);
+  position: relative; min-height: 100dvh; color: var(--text); background: var(--bg); color-scheme: light; overflow-x: hidden;
+}
+.page a:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+
+.header { position: absolute; inset: 0 0 auto; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 22px var(--pad); }
+.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: -.01em; color: var(--text); text-decoration: none; }
+.brand span { width: 9px; height: 9px; background: var(--accent); outline: 1px solid var(--accent-ink); outline-offset: -1px; }
+.signIn { padding: 8px 14px; border: 1px solid var(--text); border-radius: 4px; background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; text-decoration: none; transition: background .15s, color .15s; }
+.signIn:hover { background: var(--text); color: #fff; }
+
+/* Full-bleed stage: the simulation is the page. */
+.stage { position: relative; height: max(680px, 100dvh); overflow: hidden; isolation: isolate; border-bottom: 1px solid var(--line); }
+.stage::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 56px 56px; background-position: -1px -1px;
+  mask-image: radial-gradient(ellipse 90% 85% at 55% 55%, #000 35%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 85% at 55% 55%, #000 35%, transparent 100%);
+}
+.canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+.copy { position: absolute; z-index: 2; top: clamp(92px, 12vh, 132px); left: var(--pad); right: var(--pad); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 380px); grid-template-areas: 'eyebrow eyebrow' 'title side'; align-items: end; gap: 0 48px; }
+.copy .eyebrow { grid-area: eyebrow; }
+.copy h1 { grid-area: title; }
+.side { grid-area: side; display: flex; flex-direction: column; align-items: flex-start; gap: 20px; padding-bottom: 6px; }
+.eyebrow { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.eyebrow::before { content: ''; width: 6px; height: 6px; background: var(--accent); outline: 1px solid var(--accent-ink); outline-offset: -1px; }
+.copy h1 { margin-top: 20px; font-size: clamp(36px, 4.6vw, 66px); font-weight: 600; letter-spacing: -.045em; line-height: 1.02; }
+.lede { max-width: 46ch; font-size: 15.5px; line-height: 1.6; color: var(--muted); }
+.primary { display: inline-flex; align-items: center; gap: 10px; padding: 13px 20px; border-radius: 6px; background: var(--text); color: #fff; font-size: 15px; font-weight: 500; text-decoration: none; transition: background .15s; }
+.primary:hover { background: #24282e; }
+.primary span { transition: transform .2s; }
+.primary:hover span { transform: translateX(3px); }
+
+/* Labels pinned to the gates drawn on the canvas. */
+.annotation { position: absolute; z-index: 1; top: 44%; max-width: 200px; transform: translateX(10px); pointer-events: none; }
+.annotation p { margin-top: 8px; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.gate, .evidence { transform: translateX(-50%); text-align: center; }
+.gate p, .evidence p { margin-left: auto; margin-right: auto; max-width: 180px; padding: 2px 6px; background: var(--bg); }
+.inLabel { position: absolute; z-index: 1; left: var(--pad); top: 44%; pointer-events: none; }
+.inLabel p { margin-top: 8px; font-size: 12.5px; color: var(--muted); }
+.tag { display: inline-flex; align-items: center; gap: 8px; padding: 3px 8px; border: 1px solid var(--text); border-radius: 3px; background: var(--panel); font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--text); }
+.tag b { font-weight: 500; color: var(--accent-ink); }
+.tag i { font-style: normal; }
+.tagLime { background: var(--accent); border-color: var(--accent-ink); }
+.tagLime b { color: var(--text); }
+
+.readout { position: absolute; z-index: 2; left: var(--pad); right: var(--pad); bottom: 0; display: flex; gap: clamp(20px, 4vw, 56px); padding: 16px 0 20px; border-top: 1px solid var(--line-hi); background: linear-gradient(to top, var(--bg) 60%, transparent); }
+.readout dt { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+.readout dd { margin-top: 4px; font-family: var(--mono); font-size: 22px; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.readout .kept { color: var(--accent-ink); }
+.sim { margin-left: auto; text-align: right; }
+.live { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent-ink); }
+.live::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px #b6ea3c40; animation: pulse 1.8s ease-in-out infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 7px #b6ea3c00; } }
+
+.footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 24px; padding: 20px var(--pad) 28px; font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+
+@media (max-width: 1100px) {
+  .annotation p, .inLabel p { display: none; }
+}
+@media (max-width: 760px) {
+  .stage { height: max(760px, 100dvh); }
+  .copy { top: 84px; grid-template-columns: 1fr; grid-template-areas: 'eyebrow' 'title' 'side'; }
+  .copy h1 br { display: none; }
+  .side { margin-top: 18px; }
+  .annotation { top: 61%; }
+  .inLabel { display: none; }
+  .tag { font-size: 9.5px; padding: 2px 6px; letter-spacing: .08em; }
+  .gate .tag i { display: none; }
+  .readout dd { font-size: 18px; }
+  .readout div:nth-child(2) { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .live::before { animation: none; } .primary, .primary span, .signIn { transition: none; } }

@@ -12,6 +12,7 @@ interface RubricEditorProps {
   isSaving: boolean;
   saveStatus: 'idle' | 'saved' | 'error';
   disabled?: boolean;
+  canSave?: boolean;
 }
 
 interface SectionConfig {
@@ -69,6 +70,7 @@ export default function RubricEditor({
   isSaving,
   saveStatus,
   disabled = false,
+  canSave = false,
 }: RubricEditorProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['inclusionRules', 'exclusionRules']));
 
@@ -113,7 +115,7 @@ export default function RubricEditor({
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        {canSave && <div className="flex items-center gap-2">
           <button
             onClick={onSave}
             disabled={disabled || isSaving}
@@ -138,7 +140,7 @@ export default function RubricEditor({
           >
             Reset to Defaults
           </button>
-        </div>
+        </div>}
       </div>
 
       {/* Collapsible sections */}

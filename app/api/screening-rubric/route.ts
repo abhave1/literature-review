@@ -1,8 +1,10 @@
+import { DEFAULT_SCREENING_PROMPT_TEMPLATE } from '@/lib/screening/prompts';
+import { loadScreeningConfig } from '@/lib/screening/store';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireApiAccess, requireApiFeature, getAccount, canUseFeature } from '@/lib/auth/server';
 import { put, list, del } from '@vercel/blob';
 import {
   DEFAULT_RUBRICS,
-  DEFAULT_SCREENING_PROMPT_TEMPLATE,
   type ScreeningRubrics,
 } from '@/lib/screening/default-rubrics';
 
@@ -24,58 +26,17 @@ export interface SavedRubrics {
  * Retrieves the saved screening rubrics from Vercel Blob
  * Returns defaults if not found
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const denied = await requireApiAccess(request, ['screening']);
+  if (denied) return denied;
   try {
-    // List blobs to find the config file
-    const { blobs } = await list({ prefix: 'config/', token: RUBRIC_TOKEN });
-
-    // Find the rubrics blob
-    const rubricBlob = blobs.find(
-      (b) =>
-        b.pathname === RUBRIC_BLOB_PATH ||
-        b.pathname.endsWith('screening-rubrics.json')
-    );
-
-    if (!rubricBlob) {
-      // No saved config, return defaults
-      return NextResponse.json(
-        {
-          rubrics: DEFAULT_RUBRICS,
-          promptTemplate: DEFAULT_SCREENING_PROMPT_TEMPLATE,
-          isDefault: true,
-        },
-        {
-          headers: { 'Cache-Control': 'no-store, max-age=0' },
-        }
-      );
-    }
-
-    // Fetch the config from blob (with cache bust)
-    const response = await fetch(`${rubricBlob.url}?t=${Date.now()}`, {
-      cache: 'no-store',
-    });
-    const savedConfig: SavedRubrics = await response.json();
-
-    return NextResponse.json(
-      {
-        rubrics: savedConfig.rubrics || DEFAULT_RUBRICS,
-        promptTemplate: savedConfig.promptTemplate || DEFAULT_SCREENING_PROMPT_TEMPLATE,
-        isDefault: false,
-        updatedAt: savedConfig.updatedAt,
-      },
-      {
-        headers: { 'Cache-Control': 'no-store, max-age=0' },
-      }
-    );
-  } catch (error) {
-    console.error('Failed to load rubrics from Blob:', error);
-    // Return defaults on error
-    return NextResponse.json({
-      rubrics: DEFAULT_RUBRICS,
-      promptTemplate: DEFAULT_SCREENING_PROMPT_TEMPLATE,
-      isDefault: true,
-      error: 'Failed to load from storage, using defaults',
-    });
+    const account = await getAccount();
+    const { promptTemplate, ...safeConfig } = await loadScreeningConfig();
+    const canManagePrompts = !!account && canUseFeature(account, ['screening'], 'prompt_access');
+    return NextResponse.json({ ...safeConfig, ...(canManagePrompts ? { promptTemplate, defaultPromptTemplate: DEFAULT_SCREENING_PROMPT_TEMPLATE } : {}) },
+      { headers: { 'Cache-Control': 'private, no-store' } });
+  } catch {
+    return NextResponse.json({ error: 'Screening configuration unavailable' }, { status: 503 });
   }
 }
 
@@ -84,6 +45,8 @@ export async function GET() {
  * Saves the screening rubrics to Vercel Blob
  */
 export async function POST(request: NextRequest) {
+  const denied = await requireApiFeature(request, ['screening'], 'prompt_access');
+  if (denied) return denied;
   try {
     const body = await request.json();
     const { rubrics, promptTemplate } = body as { rubrics: ScreeningRubrics; promptTemplate?: string };
@@ -158,7 +121,9 @@ export async function POST(request: NextRequest) {
  * DELETE /api/screening-rubric
  * Resets the rubrics to defaults by deleting from Blob
  */
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
+  const denied = await requireApiFeature(request, ['screening'], 'prompt_access');
+  if (denied) return denied;
   try {
     // List and find the rubrics blob
     const { blobs } = await list({ prefix: 'config/', token: RUBRIC_TOKEN });

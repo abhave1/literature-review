@@ -1,8 +1,8 @@
 'use client';
 
+import { useCapabilities } from '@/lib/auth/use-capabilities';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import AccessKeyPrompt from '@/components/AccessKeyPrompt';
 import CsvUpload from '@/components/screening/CsvUpload';
 import RubricEditor from '@/components/screening/RubricEditor';
 import ScreeningProgress from '@/components/screening/ScreeningProgress';
@@ -11,15 +11,11 @@ import ResumeDialog from '@/components/screening/ResumeDialog';
 
 import { parseCSV, mapToArticleRows, validateColumnMapping, type ArticleRow, type ParsedCSV } from '@/lib/screening/csv-parser';
 import { detectFormat, type ColumnMapping } from '@/lib/screening/column-detector';
-import { DEFAULT_RUBRICS, DEFAULT_SCREENING_PROMPT_TEMPLATE, type ScreeningRubrics } from '@/lib/screening/default-rubrics';
+import { DEFAULT_RUBRICS, type ScreeningRubrics } from '@/lib/screening/default-rubrics';
 import { type ScreeningResult } from '@/lib/screening/response-parser';
 import { getCheckpointManager, type CheckpointInfo } from '@/lib/screening/checkpoint-manager';
 
 export default function ScreeningPage() {
-  // Auth state
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
   // CSV state
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [parsedCSV, setParsedCSV] = useState<ParsedCSV | null>(null);
@@ -33,6 +29,8 @@ export default function ScreeningPage() {
   });
   const [detectedFormat, setDetectedFormat] = useState<'scopus' | 'wos' | 'custom'>('custom');
 
+  const { canManagePrompts } = useCapabilities('screening');
+  const [defaultPromptTemplate, setDefaultPromptTemplate] = useState('');
   // Rubric state
   const [rubrics, setRubrics] = useState<ScreeningRubrics>(DEFAULT_RUBRICS);
   const [rubricIsDefault, setRubricIsDefault] = useState(true);
@@ -40,7 +38,7 @@ export default function ScreeningPage() {
   const [rubricSaveStatus, setRubricSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
 
   // Prompt template state
-  const [promptTemplate, setPromptTemplate] = useState<string>(DEFAULT_SCREENING_PROMPT_TEMPLATE);
+  const [promptTemplate, setPromptTemplate] = useState<string>('');
   const [promptIsDefault, setPromptIsDefault] = useState(true);
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
   const [promptSaveStatus, setPromptSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
@@ -64,39 +62,11 @@ export default function ScreeningPage() {
   const processingRef = useRef(false);
   const cancelledRef = useRef(false);
 
-  // Check auth on mount
+  // Load rubrics after the server has authorized the page.
   useEffect(() => {
-    const storedKey = localStorage.getItem('app_access_key');
-    if (storedKey) {
-      fetch('/api/validate-key', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: storedKey }),
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.valid) {
-            setIsAuthenticated(true);
-          } else {
-            localStorage.removeItem('app_access_key');
-          }
-        })
-        .catch(() => {
-          localStorage.removeItem('app_access_key');
-        })
-        .finally(() => setIsCheckingAuth(false));
-    } else {
-      setIsCheckingAuth(false);
-    }
+    loadRubrics();
+    checkForPendingBatch();
   }, []);
-
-  // Load rubrics when authenticated
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadRubrics();
-      checkForPendingBatch();
-    }
-  }, [isAuthenticated]);
 
   // Load saved rubrics and prompt template from API
   const loadRubrics = async () => {
@@ -107,9 +77,10 @@ export default function ScreeningPage() {
         setRubrics(data.rubrics);
         setRubricIsDefault(data.isDefault);
       }
+      if (data.defaultPromptTemplate) setDefaultPromptTemplate(data.defaultPromptTemplate);
       if (data.promptTemplate) {
         setPromptTemplate(data.promptTemplate);
-        setPromptIsDefault(data.promptTemplate === DEFAULT_SCREENING_PROMPT_TEMPLATE || data.isDefault);
+        setPromptIsDefault(data.isDefault);
       }
     } catch (err) {
       console.error('Failed to load rubrics:', err);
@@ -156,10 +127,11 @@ export default function ScreeningPage() {
       return;
     }
     try {
-      await fetch('/api/screening-rubric', { method: 'DELETE' });
+      const response = await fetch('/api/screening-rubric', { method: 'DELETE' });
+      if (!response.ok) throw new Error('Reset denied');
       setRubrics(DEFAULT_RUBRICS);
       setRubricIsDefault(true);
-      setPromptTemplate(DEFAULT_SCREENING_PROMPT_TEMPLATE);
+      setPromptTemplate(defaultPromptTemplate);
       setPromptIsDefault(true);
     } catch (err) {
       console.error('Failed to reset rubrics:', err);
@@ -190,7 +162,7 @@ export default function ScreeningPage() {
   // Reset prompt template to default
   const resetPrompt = () => {
     if (!confirm('Reset system prompt template to default?')) return;
-    setPromptTemplate(DEFAULT_SCREENING_PROMPT_TEMPLATE);
+    setPromptTemplate(defaultPromptTemplate);
     setPromptIsDefault(true);
   };
 
@@ -250,7 +222,8 @@ export default function ScreeningPage() {
           journal: a.journal,
         })),
         rubrics,
-        promptTemplate,
+        botId: 'screening',
+        promptTemplate: canManagePrompts ? promptTemplate : undefined,
       }),
     });
 
@@ -498,27 +471,10 @@ export default function ScreeningPage() {
     cancelledRef.current = true;
   };
 
-  // Loading state
-  if (isCheckingAuth) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-gray-50 to-gray-100">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Checking authentication...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Auth prompt
-  if (!isAuthenticated) {
-    return <AccessKeyPrompt onValidKey={() => setIsAuthenticated(true)} />;
-  }
-
   const mappingValid = validateColumnMapping(parsedCSV?.headers || [], columnMapping).valid;
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
+    <main className="min-h-screen bg-[#f3f4f1]">
       {/* Resume Dialog */}
       {pendingCheckpoint && (
         <ResumeDialog
@@ -609,6 +565,7 @@ export default function ScreeningPage() {
           {showRubricEditor && (
             <div className="p-6">
               <RubricEditor
+                canSave={canManagePrompts}
                 rubrics={rubrics}
                 onRubricsChange={setRubrics}
                 isDefault={rubricIsDefault}
@@ -623,7 +580,7 @@ export default function ScreeningPage() {
         </section>
 
         {/* Section 1.5: System Prompt Editor */}
-        <section className="bg-white rounded-xl shadow-sm border border-gray-200">
+        {canManagePrompts && <section className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div
             className="px-6 py-4 cursor-pointer hover:bg-gray-50 transition-colors"
             onClick={() => setShowSystemPrompt(!showSystemPrompt)}
@@ -693,7 +650,7 @@ export default function ScreeningPage() {
                 value={promptTemplate}
                 onChange={(e) => {
                   setPromptTemplate(e.target.value);
-                  setPromptIsDefault(e.target.value === DEFAULT_SCREENING_PROMPT_TEMPLATE);
+                  setPromptIsDefault(e.target.value === defaultPromptTemplate);
                 }}
                 disabled={isProcessing}
                 className="w-full bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-800 font-mono leading-relaxed resize-y min-h-[300px] max-h-[600px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
@@ -701,7 +658,7 @@ export default function ScreeningPage() {
               />
             </div>
           )}
-        </section>
+        </section>}
 
         {/* Section 2: CSV Upload */}
         <section className="bg-white rounded-xl shadow-sm border border-gray-200">

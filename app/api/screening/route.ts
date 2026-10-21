@@ -1,12 +1,15 @@
+import type { ScreeningRubrics } from '@/lib/screening/default-rubrics';
+import { CSCL_SCREENING_PROMPT_TEMPLATE } from '@/lib/screening/cscl-prompt';
+import { loadScreeningConfig } from '@/lib/screening/store';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireApiAccess, requireApiFeature } from '@/lib/auth/server';
 import { asuAimlClient } from '@/lib/asu-aiml-client';
 import {
   buildBatchScreeningSystemPrompt,
   buildScreeningPromptFromTemplate,
   buildBatchArticlesPrompt,
-  type ScreeningRubrics,
   type BatchArticleInput,
-} from '@/lib/screening/default-rubrics';
+} from '@/lib/screening/prompts';
 import {
   parseBatchScreeningResponse,
   hasNoAbstract,
@@ -18,6 +21,7 @@ export const runtime = 'nodejs';
 export const maxDuration = 300; // 5 minutes max
 
 interface BatchScreeningRequest {
+  botId: 'screening' | 'cscl-screening';
   articles: {
     id: string;
     title: string;
@@ -41,10 +45,22 @@ interface BatchScreeningResponse {
  * POST /api/screening
  * Screen a batch of articles (10-15 recommended) based on title, abstract, year, and journal
  */
-export async function POST(request: NextRequest): Promise<NextResponse<BatchScreeningResponse>> {
+export async function POST(request: NextRequest) {
+  const accessDenied = await requireApiAccess(request, ['screening', 'cscl-screening']);
+  if (accessDenied) return accessDenied;
   try {
     const body: BatchScreeningRequest = await request.json();
-    const { articles, rubrics, promptTemplate } = body;
+    const { articles, rubrics, botId } = body;
+    if (botId !== 'screening' && botId !== 'cscl-screening') return NextResponse.json({ error: 'Invalid screening bot' }, { status: 400 });
+    const denied = await requireApiAccess(request, [botId]);
+    if (denied) return denied;
+    if (body.promptTemplate !== undefined) {
+      const promptDenied = await requireApiFeature(request, [botId], 'prompt_access');
+      if (promptDenied) return promptDenied;
+      if (typeof body.promptTemplate !== 'string') return NextResponse.json({ error: 'Invalid template' }, { status: 400 });
+    }
+    const savedTemplate = botId === 'cscl-screening' ? CSCL_SCREENING_PROMPT_TEMPLATE : (await loadScreeningConfig()).promptTemplate;
+    const promptTemplate = body.promptTemplate?.trim() || savedTemplate;
 
     if (!articles || !Array.isArray(articles) || articles.length === 0) {
       return NextResponse.json(

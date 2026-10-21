@@ -5,9 +5,10 @@ export default function Mxml4Page() {
     <MxmlAnalyzer
       title="MxML Phase 4 Analysis Hub"
       promptMode="mxml4"
-      showUpload={true}
+      showUpload={false}
+      enableLocalPdfAdd={true}
+      allowPromptSave={false}
       showJournalType={true}
-      navLinks={[{ href: '/screening', label: 'Screening →' }]}
       fileCategories={[
         { key: 'measurement', label: 'Measurement Journals', folderKey: 'mxml4-measurement', blobPrefix: 'mxml4-measurement/' },
         { key: 'nonmeasurement', label: 'Non-measurement Journals', folderKey: 'mxml4-nonmeasurement', blobPrefix: 'mxml4-nonmeasurement/' },
