@@ -1,3 +1,4 @@
+import { createRequestUsage } from '@/lib/usage/server';
 import { loadPrompt } from '@/lib/prompts/store';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiAccess, requireApiFeature } from '@/lib/auth/server';
@@ -66,10 +67,12 @@ export async function POST(request: NextRequest) {
       console.log(`Using rated aspects: ${ratedAspects.substring(0, 100)}...`);
     }
 
+    const usage = await createRequestUsage(botId as BotId, 'analyze');
+
     // Process files sequentially
     const results: AnalysisResult[] = [];
     for (const file of files) {
-      const result = await analyzeText(file, ratedAspects, useMxmlPrompt, customSystemPrompt);
+      const result = await analyzeText(file, usage, ratedAspects, useMxmlPrompt, customSystemPrompt);
       results.push(result);
     }
 
@@ -96,6 +99,7 @@ export async function POST(request: NextRequest) {
  */
 async function analyzeText(
   file: FileInput,
+  usage: Awaited<ReturnType<typeof createRequestUsage>>,
   ratedAspects?: string,
   useMxmlPrompt: boolean = false,
   customSystemPrompt?: string
@@ -226,7 +230,7 @@ Example of a good formatted response for an aspect WITHOUT exclusion criteria:
         temperature: 0.2,
       },
       systemPrompt: systemPromptToUse // Pass the override if it exists
-    });
+    }, usage.forQuery());
 
     console.log(`Analysis complete for ${fileName}`);
 
