@@ -46,3 +46,30 @@ do $$ begin
 end $$;
 reset role;
 select 'PASS: usage ledger migration, service writes, token constraints, admin-only read access' as result;
+
+-- One app request, two logical calls, three attempts: unknown usage must be visible.
+set role service_role;
+insert into public.ai_usage_ledger(id,user_id,request_id,call_id,attempt,bot_key,project_name,operation,model_provider,model_name,status,input_tokens,output_tokens,cost_usd,completed_at)
+values
+ ('10000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000002',
+  '20000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000002',1,
+  'mxml4','MxML','analyze','gcp-deepmind','geminipro3_1','failed',null,null,null,now()),
+ ('10000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000002',
+  '20000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000002',2,
+  'mxml4','MxML','analyze','gcp-deepmind','geminipro3_1','succeeded',7,3,0.00009,now());
+do $$ declare totals record; begin
+  select count(distinct request_id) as requests, count(distinct call_id) as calls,
+    count(*) as attempts, sum(input_tokens) as input_total, sum(output_tokens) as output_total,
+    sum(cost_usd) as cost_total,
+    count(*) filter (where input_tokens is null or output_tokens is null) as unknown_attempts
+    into totals from public.ai_usage_ledger;
+  if totals.requests <> 1 or totals.calls <> 2 or totals.attempts <> 3
+    or totals.input_total <> 72 or totals.output_total <> 42 or totals.cost_total <> 0.001
+    or totals.unknown_attempts <> 1 then raise exception 'Incorrect request/retry aggregation'; end if;
+  begin
+    update public.ai_usage_ledger set attempt=1 where id='10000000-0000-0000-0000-000000000003';
+    raise exception 'Duplicate attempt accepted';
+  exception when unique_violation then null; end;
+end $$;
+reset role;
+select 'PASS: aggregation separates app requests, calls and attempts, preserves unknowns, prevents duplicate attempts' as result;
