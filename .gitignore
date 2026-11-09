@@ -39,6 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+/scratch/
+__pycache__/
 *output
 *test-parser.js
 .env*.local
