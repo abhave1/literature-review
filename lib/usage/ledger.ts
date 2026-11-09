@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { estimateRates } from './pricing';
 
 export type QueryAttemptObserver = (send: () => Promise<Response>, attempt: number) => Promise<Response>;
 type JsonObject = Record<string, unknown>;
@@ -31,7 +32,7 @@ export interface UsageContext {
 }
 export interface LedgerStore {
   insert(row: UsageContext & { id: string; call_id: string; attempt: number; status: 'pending' }): Promise<void>;
-  finish(id: string, row: ReturnType<typeof parseUsage> & {
+  finish(id: string, row: ReturnType<typeof parseUsage> & ReturnType<typeof estimateRates> & {
     status: 'succeeded' | 'failed'; http_status: number | null; completed_at: string;
   }): Promise<void>;
 }
@@ -46,9 +47,12 @@ export function observeQuery(context: UsageContext, store: LedgerStore): QueryAt
     const finish = async (response?: Response) => {
       let body: unknown;
       try { body = await response?.clone().json(); } catch { /* Unknown usage stays NULL. */ }
+      const usage = parseUsage(body);
       try {
         await store.finish(id, {
-          ...parseUsage(body), status: response?.ok ? 'succeeded' : 'failed',
+          ...usage,
+          ...estimateRates(context.model_provider, context.model_name, usage.input_tokens, usage.output_tokens),
+          status: response?.ok ? 'succeeded' : 'failed',
           http_status: response?.status ?? null, completed_at: new Date().toISOString(),
         });
       } catch {

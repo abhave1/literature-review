@@ -62,6 +62,9 @@ test('analysis attributes two files to verified user and one server-generated re
   assert.notEqual(rows[0].call_id, rows[1].call_id);
   assert.equal(updates[0].input_tokens, 10);
   assert.equal(updates[1].output_tokens, 2);
+  assert.equal(updates[0].estimate_input_usd_per_million, 2);
+  assert.equal(updates[0].estimate_output_usd_per_million, 12);
+  assert.equal(updates[0].cost_usd, 0.001);
 });
 test('screening records provider usage even when response parsing fails; no-abstract batches do not call model', async () => {
   const { POST } = await import('../app/api/screening/route');
@@ -70,6 +73,8 @@ test('screening records provider usage even when response parsing fails; no-abst
   assert.equal(modelCalls, 1); assert.equal(rows.length, 1);
   assert.equal(rows[0].operation, 'screening'); assert.equal(rows[0].user_id, 'verified-user');
   assert.equal(updates[0].status, 'succeeded'); assert.equal(updates[0].input_tokens, 10);
+  assert.equal(updates[0].estimate_input_usd_per_million, 2);
+  assert.ok(updates[0].estimate_rate_version);
   await POST(call('/api/screening', { botId: 'screening', articles: [{ ...article, abstract: '' }], rubrics: {} }));
   assert.equal(modelCalls, 1); assert.equal(rows.length, 1);
 });

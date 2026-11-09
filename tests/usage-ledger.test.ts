@@ -2,6 +2,7 @@ import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { observeQuery, parseUsage, type LedgerStore, type UsageContext } from '../lib/usage/ledger';
 import { AsuAimlClient } from '../lib/asu-aiml-client';
+import { estimateRates } from '../lib/usage/pricing';
 
 const context: UsageContext = { user_id: 'verified-user', request_id: 'request', bot_key: 'mxml4', project_name: 'MxML', operation: 'analyze', model_provider: 'gcp-deepmind', model_name: 'geminipro3_1' };
 const metric = { input_token_count: 65, output_token_count: 39, total_token_cost: 0.00091 };
@@ -71,4 +72,39 @@ test('network failures and malformed response usage stay unknown; independent ca
   assert.equal(finishes[0].row.http_status, null);
   assert.notEqual(inserts[0].call_id, inserts[1].call_id);
   assert.equal(inserts[0].request_id, inserts[1].request_id);
+});
+
+test('estimates snapshot both context tiers and never price unknown usage or models', () => {
+  const price = (input: number | null, output: number | null, model = context.model_name) =>
+    estimateRates(context.model_provider, model, input, output);
+  assert.equal(price(200_000, 5).estimate_input_usd_per_million, 2);
+  assert.equal(price(200_000, 5).estimate_output_usd_per_million, 12);
+  assert.equal(price(200_001, 5).estimate_input_usd_per_million, 4);
+  assert.equal(price(200_001, 5).estimate_output_usd_per_million, 18);
+  assert.equal(price(0, 0).estimate_input_usd_per_million, 2);
+  for (const [input, output] of [[null, 10], [10, null], [-1, 0], [1.5, 0], [Infinity, 0], [0, NaN]]) {
+    assert.equal(price(input, output).estimate_rate_version, null);
+  }
+  assert.equal(price(10, 10, 'unknown-model').estimate_rate_version, null);
+  assert.equal(estimateRates('unknown-provider', context.model_name, 10, 10).estimate_rate_version, null);
+});
+
+test('cost estimates do not overwrite reported zero or fabricate missing provider costs', async () => {
+  const { store, finishes } = memoryStore();
+  for (const cost of [0, undefined]) {
+    await observeQuery(context, store)(async () => Response.json({ metadata: {
+      usage_metric: { input_token_count: 1000, output_token_count: 100, total_token_cost: cost },
+    } }), 1);
+  }
+  assert.deepEqual(finishes.map(x => x.row.cost_usd), [0, null]);
+  for (const { row } of finishes) {
+    assert.equal(row.estimate_input_usd_per_million, 2);
+    assert.equal(row.estimate_output_usd_per_million, 12);
+    assert.match(row.estimate_rate_source!, /^https:\/\/cloud.google.com\//);
+    assert.ok(row.estimate_rate_version);
+  }
+  await observeQuery(context, store)(async () => Response.json({ metadata: {
+    usage_metric: { input_token_count: 1000 },
+  } }), 1);
+  assert.equal(finishes[2].row.estimate_input_usd_per_million, null);
 });
