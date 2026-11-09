@@ -1,0 +1,2 @@
+google-genai[local-tokenizer-transformers]==3.0.0
+psycopg[binary]==3.3.8

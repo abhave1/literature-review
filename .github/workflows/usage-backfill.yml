@@ -1,0 +1,42 @@
+name: Historical usage estimates
+on:
+  pull_request:
+    paths:
+      - 'scripts/usage_backfill.py'
+      - 'scripts/usage-backfill-requirements.txt'
+      - 'supabase/migrations/202611090001_ai_usage_estimates.sql'
+      - 'tests/test_usage_backfill.py'
+      - '.github/workflows/usage-backfill.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: fixture-only
+          POSTGRES_DB: usage_backfill_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install 'psycopg[binary]==3.3.8'
+      - name: Exercise preparation and real PostgreSQL transaction safety with synthetic data
+        env:
+          BACKFILL_TEST_DATABASE: disposable
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: fixture-only
+          PGDATABASE: usage_backfill_test
+        run: python -m unittest discover -s tests -p test_usage_backfill.py -v
