@@ -1,3 +1,4 @@
+import { createRequestUsage } from '@/lib/usage/server';
 import type { ScreeningRubrics } from '@/lib/screening/default-rubrics';
 import { CSCL_SCREENING_PROMPT_TEMPLATE } from '@/lib/screening/cscl-prompt';
 import { loadScreeningConfig } from '@/lib/screening/store';
@@ -121,6 +122,8 @@ export async function POST(request: NextRequest) {
       : buildBatchScreeningSystemPrompt(rubrics);
     const userPrompt = buildBatchArticlesPrompt(articlesWithAbstract);
 
+    const usage = await createRequestUsage(botId, 'screening');
+
     // Call the LLM
     const result = await asuAimlClient.query(userPrompt, {
       model_provider: 'gcp-deepmind',
@@ -129,7 +132,7 @@ export async function POST(request: NextRequest) {
         temperature: 0.2, // Lower temperature for consistent JSON output
       },
       systemPrompt,
-    });
+    }, usage.forQuery());
 
     const rawResponse = result.response || String(result);
 

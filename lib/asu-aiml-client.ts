@@ -1,3 +1,4 @@
+import type { QueryAttemptObserver } from './usage/ledger';
 import * as dotenv from 'dotenv';
 
 // Load environment variables from .env file
@@ -125,7 +126,8 @@ export class AsuAimlClient {
   private async fetchWithRetry(
     url: string,
     options: RequestInit,
-    operationName: string
+    operationName: string,
+    observeAttempt?: QueryAttemptObserver
   ): Promise<Response> {
     let lastError: Error | null = null;
 
@@ -138,10 +140,8 @@ export class AsuAimlClient {
           console.log(`[ASU AIML] Retry attempt ${attempt + 1}/${this.retryConfig.maxAttempts} for ${operationName}`);
         }
 
-        const response = await fetch(url, {
-          ...options,
-          signal: controller.signal,
-        });
+        const send = () => fetch(url, { ...options, signal: controller.signal });
+        const response = observeAttempt ? await observeAttempt(send, attempt + 1) : await send();
 
         clearTimeout(timeoutId);
 
@@ -222,7 +222,7 @@ export class AsuAimlClient {
    * @param query - Query string
    * @param options - Query options including model parameters, search params, etc.
    */
-  async query(query: string, options?: any): Promise<any> {
+  async query(query: string, options?: any, observeAttempt?: QueryAttemptObserver): Promise<any> {
     const payload: any = {
       action: 'query',
       query,
@@ -247,7 +247,8 @@ export class AsuAimlClient {
         headers: this.getHeaders(),
         body: JSON.stringify(payload),
       },
-      'query'
+      'query',
+      observeAttempt
     );
 
     if (!response.ok) {
