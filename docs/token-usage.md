@@ -27,6 +27,18 @@ an old rate version in place; create a new version for future calls.
 
 ## Reports
 
+Admins can open **Usage & costs** from the bot workspace or the admin navigation
+at `/admin/usage`. The page defaults to the current UTC month and offers inclusive
+date filters and an all-time option. It shows 100 users per page, resolves current
+account emails, and retains UUIDs for deleted or unknown accounts. Selecting a
+user shows their latest 50 requests in the period; narrow the dates for earlier
+requests. Coverage counts accompany each average and partial total.
+
+Both the route proxy and server data loader verify admin access. Queries use the
+signed-in user's Supabase session, preserving database RLS. Responses are dynamic
+and private/no-store. No service-role key, new table, or migration is needed for
+the dashboard. Ordinary users cannot load it by entering its URL directly.
+
 Two read-only, security-invoker SQL functions expose reports through Supabase RPC.
 They inherit the ledger's admin-only read policy. Ordinary signed-in users see
 no rows; anonymous users cannot execute them. No SQL views or stored rollups.

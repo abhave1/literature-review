@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:auth": "tsx --test tests/auth.test.ts",
-    "test:usage": "NODE_PATH=tests/stubs tsx --experimental-test-module-mocks --test --test-isolation=process tests/usage-ledger.test.ts tests/usage-routes.test.ts",
+    "test:usage": "NODE_PATH=tests/stubs tsx --experimental-test-module-mocks --test --test-isolation=process tests/usage-ledger.test.ts tests/usage-routes.test.ts tests/admin-usage.test.ts",
     "test:prompts": "NODE_PATH=tests/stubs tsx --experimental-test-module-mocks --test --test-isolation=process tests/prompt-access.test.ts tests/library-access.test.ts",
     "test:auth:http": "tsx tests/auth.integration.ts",
     "upload-mxml": "tsx scripts/upload-to-blob.ts"

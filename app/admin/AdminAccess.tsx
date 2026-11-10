@@ -109,6 +109,7 @@ export default function AdminAccess({ initial }: { initial: AdminSnapshot }) {
     <aside className={styles.navigation}>
       <div className={styles.navTitle}><span className={styles.brandMark}>R</span><div>Research Bot<small>Administration</small></div></div>
       <nav aria-label="Administration">
+        <Link className={styles.navItem} href="/admin/usage" onClick={event => { if (busy || (dirty && !window.confirm('Discard your unsaved permission changes?'))) event.preventDefault(); }}>Usage</Link>
         <button className={styles.navItem} data-active={view === 'users'} aria-current={view === 'users' ? 'page' : undefined} disabled={busy} onClick={() => {if (view !== 'users') navigate(() => setView('users'));}}><Icon name="people"/>People & access<span>{data.users.length}</span></button>
         <button className={styles.navItem} data-active={view === 'projects'} aria-current={view === 'projects' ? 'page' : undefined} disabled={busy} onClick={() => {if (view !== 'projects') navigate(() => setView('projects'));}}><Icon name="projects"/>Project features</button>
       </nav>
