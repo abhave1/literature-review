@@ -51,7 +51,7 @@ test('date filters use inclusive UTC days and preserve all-time and user selecti
   assert.deepEqual(reportBounds(f), { p_from: '2026-11-01T00:00:00.000Z', p_to: '2026-11-10T00:00:00.000Z' });
   const link = new URL(usageUrl(f), 'http://localhost');
   assert.equal(link.pathname, '/admin');
-  assert.equal(link.searchParams.get('tab'), 'usage');
+  assert.equal(link.searchParams.get('tab'), 'costs');
   assert.equal(link.searchParams.get('user'), userId);
   assert.deepEqual(reportBounds(usageFilters({ from: '', to: '' })), { p_from: '-infinity', p_to: 'infinity' });
   assert.equal(usageFilters({}, new Date('2026-11-09T23:59Z')).from, '2026-11-01');
@@ -161,12 +161,12 @@ test('selected-user request details are bounded and never leak another user or h
 });
 
 
-test('old usage bookmarks redirect into People & access with the selected user and dates', async () => {
+test('old usage bookmarks redirect into the Costs sidebar view with the selected user and dates', async () => {
   const params = { from: '2026-11-01', to: '2026-11-09', user: userId, page: '5' };
   await assert.rejects(() => legacyUsagePage({ searchParams: Promise.resolve(params) }),
     { message: `REDIRECT:${usageUrl(usageFilters({ ...params, page: '1' }))}` });
   await assert.rejects(() => legacyUsagePage({ searchParams: Promise.resolve({ user: 'invalid' }) }),
-    { message: 'REDIRECT:/admin?tab=usage' });
+    { message: 'REDIRECT:/admin?tab=costs' });
 });
 
 test('selected-user dates scope both queries and request pagination leaves totals unpaginated', async () => {

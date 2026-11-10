@@ -27,18 +27,19 @@ an old rate version in place; create a new version for future calls.
 
 ## Reports
 
-Admins open **People & access** at `/admin`, select a person, and choose their
-**Usage** tab. Summary costs, token averages, inclusive UTC date filters, and
-paginated request details all live inside that selected-user panel. There is no
-separate usage dashboard or workspace link. Old `/admin/usage` bookmarks redirect
-to the Usage tab, preserving the selected user and valid date filters.
+Admins open **Costs** in the `/admin` left sidebar, alongside **People & access**
+and **Project features**. Select a person to see cost summaries, token averages,
+inclusive UTC date filters, and paginated request details. Costs uses the same
+admin shell; it is not a nested tab inside a person's access settings. Old
+`/admin/usage` bookmarks and `?tab=usage` links open Costs, preserving valid
+user/date filters. New report links use `/admin?tab=costs`.
 
 The read-only selected-user API requires admin authorization and uses the
 caller's session so ledger RLS remains enforced. It scopes both summary and
 request queries to the selected user. Each request page returns at most 50 rows
 plus a next-page indicator, with stable newest-first ordering. Unknown usage is
-shown as unknown, and cost coverage remains explicit. Permission drafts remain
-mounted when switching between Access and Usage.
+shown as unknown, and cost coverage remains explicit. Sidebar navigation keeps
+the existing unsaved-permission confirmation before leaving People & access.
 
 Two read-only, security-invoker SQL functions expose reports through Supabase RPC.
 They inherit the ledger's admin-only read policy. Ordinary signed-in users see
