@@ -74,3 +74,5 @@ end $$;
 reset role;
 select 'PASS: aggregation separates app requests, calls and attempts, preserves unknowns, prevents duplicate attempts' as result;
 \ir usage-cost-estimates.sql
+
+\ir usage-daily.sql
