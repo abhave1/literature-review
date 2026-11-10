@@ -27,12 +27,19 @@ an old rate version in place; create a new version for future calls.
 
 ## Reports
 
-Admins open **Costs** in the `/admin` left sidebar, alongside **People & access**
-and **Project features**. Select a person to see cost summaries, token averages,
-inclusive UTC date filters, and paginated request details. Costs uses the same
-admin shell; it is not a nested tab inside a person's access settings. Old
-`/admin/usage` bookmarks and `?tab=usage` links open Costs, preserving valid
-user/date filters. New report links use `/admin?tab=costs`.
+Admins have two Costs views in `/admin`:
+
+- **People & access → select a person → Costs** shows that user's cost summaries,
+  token averages, inclusive UTC date filters, and paginated request details. The
+  adjacent Access tab keeps unsaved permission edits when switching between tabs.
+- **Costs in the left sidebar** shows all users together, day by day: active users,
+  requests/attempts, known input/output tokens, known USD, and measurement coverage.
+  It defaults to the current UTC month, fills zero-activity days, and accepts up to
+  366 inclusive days. Requests and all later retries belong to their UTC start day.
+
+Individual report links use `/admin?tab=user-costs&user=...`. Old `/admin/usage`
+bookmarks and `?tab=usage`/`?tab=costs` links containing a user still open that
+person's Costs tab. `/admin?tab=costs` opens the all-user daily report.
 
 The read-only selected-user API requires admin authorization and uses the
 caller's session so ledger RLS remains enforced. It scopes both summary and
@@ -41,7 +48,7 @@ plus a next-page indicator, with stable newest-first ordering. Unknown usage is
 shown as unknown, and cost coverage remains explicit. Sidebar navigation keeps
 the existing unsaved-permission confirmation before leaving People & access.
 
-Two read-only, security-invoker SQL functions expose reports through Supabase RPC.
+Read-only, security-invoker SQL functions expose reports through Supabase RPC.
 They inherit the ledger's admin-only read policy. Ordinary signed-in users see
 no rows; anonymous users cannot execute them. No SQL views or stored rollups.
 
@@ -51,9 +58,13 @@ select * from public.ai_usage_request_totals('2026-11-01', '2026-12-01');
 
 -- One row per user, with per-request average tokens and USD estimates.
 select * from public.ai_usage_user_totals('2026-11-01', '2026-12-01');
+
+-- Daily totals across every user, inclusive UTC dates, including zero-activity days.
+-- This function explicitly rejects non-admins (including empty date ranges).
+select * from public.ai_usage_daily_totals('2026-11-01', '2026-11-30');
 ```
 
-Date bounds are inclusive/exclusive and select by the start of the app request.
+Request/user report date bounds are inclusive/exclusive and select by the start of the app request.
 Attempts finishing outside the window are still included. Omit bounds for all
 history. Use explicit timezone offsets when supplying dates from an application.
 
@@ -74,7 +85,8 @@ totals once its attempt finishes.
 ## Rollout
 
 Apply `202610300001_ai_usage_ledger.sql` and
-`202611090002_usage_cost_estimates.sql` before deploying the code. Both belong to
+`202611090002_usage_cost_estimates.sql`, then
+`202611100001_daily_usage_totals.sql` before deploying the code. These belong to
 the app's existing Supabase database. Verify the report functions and admin-only
 access, then deploy and check a real authenticated request's usage row.
 

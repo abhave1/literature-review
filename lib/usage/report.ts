@@ -36,7 +36,7 @@ export function reportBounds(filters: UsageFilters) {
 
 export function usageUrl(filters: UsageFilters, changes: Partial<UsageFilters> = {}) {
   const f = { ...filters, ...changes };
-  const params = new URLSearchParams({ tab: 'costs', from: f.from, to: f.to, page: String(f.page) });
+  const params = new URLSearchParams({ tab: f.user ? 'user-costs' : 'costs', from: f.from, to: f.to, page: String(f.page) });
   if (f.user) params.set('user', f.user);
   return `/admin?${params}`;
 }

@@ -1,6 +1,7 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
+import { dailyFilters } from '../lib/usage/daily';
 import { usageFilters, reportBounds, usageUrl } from '../lib/usage/report';
 
 const userId = '00000000-0000-0000-0000-000000000001';
@@ -11,10 +12,13 @@ mock.module('next/headers', { namedExports: { cookies: async () => ({ getAll: ()
 mock.module('next/navigation', { namedExports: { redirect: (url: string) => { throw new Error(`REDIRECT:${url}`); } } });
 let legacyUsagePage: typeof import('../app/admin/usage/page').default;
 let loadAdminUsage: typeof import('../lib/usage/admin-report').loadAdminUsage;
+let dailyUsageGET: typeof import('../app/api/admin/usage/daily/route').GET;
+let dailyRows: object[] = [];
 let userUsageGET: typeof import('../app/api/admin/usage/route').GET;
 test.before(async () => {
   ({ loadAdminUsage } = await import('../lib/usage/admin-report'));
   ({ GET: userUsageGET } = await import('../app/api/admin/usage/route'));
+  ({ GET: dailyUsageGET } = await import('../app/api/admin/usage/daily/route'));
   ({ default: legacyUsagePage } = await import('../app/admin/usage/page'));
 });
 let loggedIn = true, admin = true, unavailable = false, reportCalls = 0;
@@ -24,6 +28,7 @@ let detailsUnavailable = false;
 const requests: { url: URL; body: Record<string, unknown> }[] = [];
 test.beforeEach(() => {
   loggedIn = true; admin = true; unavailable = false; reportCalls = 0; totals = []; requests.length = 0; detailsUnavailable = false;
+  dailyRows = [];
   detailRows = [{ user_id: userId, input_tokens: null, provider_cost_usd: 0, estimated_cost_usd: null }];
   process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://auth-test.supabase.co';
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'fake-publishable';
@@ -39,6 +44,7 @@ test.beforeEach(() => {
     requests.push({ url, body: JSON.parse(String(init?.body ?? '{}')) });
     if (unavailable) return Response.json({ message: 'missing function' }, { status: 404 });
     if (url.pathname === '/rest/v1/rpc/admin_access_snapshot') return Response.json({ users: [{ id: userId, email: 'researcher@example.edu', role: 'external' }] });
+    if (url.pathname === '/rest/v1/rpc/ai_usage_daily_totals') return Response.json(dailyRows);
     if (url.pathname === '/rest/v1/rpc/ai_usage_user_totals') return Response.json(totals);
     if (url.pathname === '/rest/v1/rpc/ai_usage_request_totals') return detailsUnavailable ? Response.json({ message: 'unavailable' }, { status: 503 }) : Response.json(detailRows);
     throw new Error(`Unexpected request: ${url.pathname}`);
@@ -51,7 +57,7 @@ test('date filters use inclusive UTC days and preserve all-time and user selecti
   assert.deepEqual(reportBounds(f), { p_from: '2026-11-01T00:00:00.000Z', p_to: '2026-11-10T00:00:00.000Z' });
   const link = new URL(usageUrl(f), 'http://localhost');
   assert.equal(link.pathname, '/admin');
-  assert.equal(link.searchParams.get('tab'), 'costs');
+  assert.equal(link.searchParams.get('tab'), 'user-costs');
   assert.equal(link.searchParams.get('user'), userId);
   assert.deepEqual(reportBounds(usageFilters({ from: '', to: '' })), { p_from: '-infinity', p_to: 'infinity' });
   assert.equal(usageFilters({}, new Date('2026-11-09T23:59Z')).from, '2026-11-01');
@@ -161,7 +167,7 @@ test('selected-user request details are bounded and never leak another user or h
 });
 
 
-test('old usage bookmarks redirect into the Costs sidebar view with the selected user and dates', async () => {
+test('old usage bookmarks redirect into the per-user Costs tab with the selected user and dates', async () => {
   const params = { from: '2026-11-01', to: '2026-11-09', user: userId, page: '5' };
   await assert.rejects(() => legacyUsagePage({ searchParams: Promise.resolve(params) }),
     { message: `REDIRECT:${usageUrl(usageFilters({ ...params, page: '1' }))}` });
@@ -186,4 +192,35 @@ test('invalid dates and request page numbers cannot query usage', async () => {
     assert.equal((await userUsageGET(usageRequest(`user=${userId}&${filter}`))).status, 400);
   }
   assert.equal(reportCalls, 0);
+});
+
+
+const dailyRequest = (query = 'from=2026-11-09&to=2026-11-10') => new NextRequest(`https://app.example/api/admin/usage/daily?${query}`);
+test('daily report requires admin before loading data and does not accept user filters', async () => {
+  loggedIn = false;
+  assert.equal((await dailyUsageGET(dailyRequest())).status, 401);
+  loggedIn = true; admin = false;
+  assert.equal((await dailyUsageGET(dailyRequest())).status, 403);
+  admin = true;
+  for (const query of ['from=&to=', 'from=2026-02-30', 'from=2025-01-01&to=2026-11-10', 'from=2026-11-11&to=2026-11-10', 'from=2026-11-09&from=2026-11-10', `user=${userId}`]) {
+    assert.equal((await dailyUsageGET(dailyRequest(query))).status, 400);
+  }
+  assert.equal(reportCalls, 0);
+  assert.deepEqual(dailyFilters({}, new Date('2026-11-10T00:00Z')), { from: '2026-11-01', to: '2026-11-10' });
+});
+test('daily report uses caller RLS, preserves zero/unknown values and checks every requested day', async () => {
+  dailyRows = [{ day: '2026-11-09', known_accounted_cost_usd: 0 }, { day: '2026-11-10', known_accounted_cost_usd: null }];
+  const response = await dailyUsageGET(dailyRequest());
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'private, no-store');
+  assert.deepEqual((await response.json()).days, dailyRows);
+  assert.equal(reportCalls, 1);
+  assert.equal(requests[0].url.pathname, '/rest/v1/rpc/ai_usage_daily_totals');
+  assert.deepEqual(requests[0].body, { p_from: '2026-11-09', p_through: '2026-11-10' });
+  dailyRows = [{ day: '2026-11-10' }];
+  assert.equal((await dailyUsageGET(dailyRequest())).status, 503);
+  dailyRows = [{ day: '2026-11-09' }, { day: '2026-11-09' }];
+  assert.equal((await dailyUsageGET(dailyRequest())).status, 503);
+  unavailable = true;
+  assert.equal((await dailyUsageGET(dailyRequest())).status, 503);
 });
