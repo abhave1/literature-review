@@ -7,6 +7,7 @@ import { normalizeBotCatalog } from '@/lib/auth/bot-catalog';
 import styles from './admin.module.css';
 import AddUserDialog from './AddUserDialog';
 import UserUsage from './UserUsage';
+import UserDetailTabs from './UserDetailTabs';
 import DeleteUserDialog from './DeleteUserDialog';
 import Button from '@/components/ui/Button';
 
@@ -126,12 +127,14 @@ export default function AdminAccess({ initial }: { initial: AdminSnapshot }) {
           <div className={styles.peopleList}>{visibleUsers.map(person => <button key={person.id} disabled={busy} className={styles.person} data-selected={userId === person.id} aria-pressed={userId === person.id} onClick={() => {if (userId !== person.id) navigate(() => setUserId(person.id));}}><span className={styles.avatar}>{(person.email ?? '?')[0].toUpperCase()}</span><span className={styles.personText}><strong>{person.email ?? 'Email unavailable'}</strong><small>{roleLabel(person.role)}{person.role === 'admin' ? ' · All projects' : ` · ${data.memberships.filter(item => item.user_id === person.id).length} projects`}</small></span></button>)}{!visibleUsers.length && <div className={styles.empty}>No matching users.<button onClick={() => {setQuery('');setFilter('all');}}>Clear filters</button></div>}</div>
           <div className={styles.listHelp}><Icon name="people"/><p>Add a user by email, then choose their projects and bots. Users who sign in also appear here.</p></div>
         </section>
-        <section className={styles.details} aria-label="Selected user permissions">
+        <section className={styles.details} aria-label="Selected user details">
           {user ? <><div className={styles.userHeader}><span className={`${styles.avatar} ${styles.largeAvatar}`}>{(user.email ?? '?')[0].toUpperCase()}</span><div><h2>{user.email ?? 'Email unavailable'}</h2><p>{user.role === 'admin' ? 'Access to all projects and bots' : user.role === 'external' ? 'Access is limited to your assignments' : 'No access assigned yet'}</p></div><div className={styles.userHeaderActions}><Badge tone={user.role === 'admin' ? 'blue' : ''}>{roleLabel(user.role)}</Badge>{user.role === 'admin'
               ? <span className={styles.protected} title="Admin accounts are protected from deletion."><Icon name="lock"/>Protected</span>
               : <Button size="sm" className="hover:enabled:border-red-300 hover:enabled:bg-red-50 hover:enabled:text-red-700" disabled={busy || !user.email} onClick={() => navigate(() => {setRevision(value => value + 1);setDeletingUser(user);})}><Icon name="trash"/>Delete user</Button>}</div></div>
-            <UserUsage key={user.id} userId={user.id}/>
-            <UserAccess key={`${userId}:${revision}`} data={data} user={user} busy={busy} save={save} onDirty={setDirty}/>
+            <UserDetailTabs dirty={dirty} busy={busy}
+              usage={<UserUsage key={user.id} userId={user.id}/>}
+              access={<UserAccess key={`${userId}:${revision}`} data={data} user={user} busy={busy} save={save} onDirty={setDirty}/>}/>
+
           </> : <div className={styles.empty}>Users will appear after signing in with Google.</div>}
         </section>
       </div> : <div className={styles.settingsWorkspace}>

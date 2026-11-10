@@ -16,9 +16,12 @@ test.before(async () => {
 });
 let loggedIn = true, admin = true, unavailable = false, reportCalls = 0;
 let totals: object[] = [];
+let detailRows: object[] = [];
+let detailsUnavailable = false;
 const requests: { url: URL; body: Record<string, unknown> }[] = [];
 test.beforeEach(() => {
-  loggedIn = true; admin = true; unavailable = false; reportCalls = 0; totals = []; requests.length = 0;
+  loggedIn = true; admin = true; unavailable = false; reportCalls = 0; totals = []; requests.length = 0; detailsUnavailable = false;
+  detailRows = [{ user_id: userId, input_tokens: null, provider_cost_usd: 0, estimated_cost_usd: null }];
   process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://auth-test.supabase.co';
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'fake-publishable';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'must-not-use-service-key';
@@ -34,7 +37,7 @@ test.beforeEach(() => {
     if (unavailable) return Response.json({ message: 'missing function' }, { status: 404 });
     if (url.pathname === '/rest/v1/rpc/admin_access_snapshot') return Response.json({ users: [{ id: userId, email: 'researcher@example.edu', role: 'external' }] });
     if (url.pathname === '/rest/v1/rpc/ai_usage_user_totals') return Response.json(totals);
-    if (url.pathname === '/rest/v1/rpc/ai_usage_request_totals') return Response.json([{ user_id: userId, input_tokens: null, provider_cost_usd: 0, estimated_cost_usd: null }]);
+    if (url.pathname === '/rest/v1/rpc/ai_usage_request_totals') return detailsUnavailable ? Response.json({ message: 'unavailable' }, { status: 503 }) : Response.json(detailRows);
     throw new Error(`Unexpected request: ${url.pathname}`);
   });
 });
@@ -111,11 +114,16 @@ test('selected-user API loads all-time usage for only that user using caller RLS
   const response = await userUsageGET(usageRequest());
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'private, no-store');
-  assert.deepEqual(await response.json(), { userId, usage: totals[0] });
-  assert.equal(reportCalls, 1);
+  assert.deepEqual(await response.json(), { userId, usage: totals[0], requests: detailRows, hasMoreRequests: false });
+  assert.equal(reportCalls, 2);
   assert.equal(requests[0].url.pathname, '/rest/v1/rpc/ai_usage_user_totals');
   assert.equal(requests[0].url.searchParams.get('user_id'), `eq.${userId}`);
   assert.deepEqual(requests[0].body, { p_from: '-infinity', p_to: 'infinity' });
+  const details = requests.find(row => row.url.pathname.endsWith('/ai_usage_request_totals'))!;
+  assert.equal(details.url.searchParams.get('user_id'), `eq.${userId}`);
+  assert.equal(details.url.searchParams.get('order'), 'started_at.desc,request_id.asc');
+  assert.equal(details.url.searchParams.get('limit'), '51');
+  assert.deepEqual(details.body, { p_from: '-infinity', p_to: 'infinity' });
 });
 
 test('selected-user API distinguishes no history from unavailable and rejects bad user filters', async () => {
@@ -123,10 +131,25 @@ test('selected-user API distinguishes no history from unavailable and rejects ba
     assert.equal((await userUsageGET(usageRequest(query))).status, 400);
   }
   assert.equal(reportCalls, 0);
-  assert.deepEqual(await (await userUsageGET(usageRequest())).json(), { userId, usage: null });
+  detailRows = [];
+  assert.deepEqual(await (await userUsageGET(usageRequest())).json(), { userId, usage: null, requests: [], hasMoreRequests: false });
   unavailable = true;
   assert.equal((await userUsageGET(usageRequest())).status, 503);
   unavailable = false;
   totals = [{ user_id: 'another-user' }];
+  assert.equal((await userUsageGET(usageRequest())).status, 503);
+});
+
+
+test('selected-user request details are bounded and never leak another user or hide query failures', async () => {
+  detailRows = Array.from({ length: 51 }, (_, index) => ({ user_id: userId, request_id: `request-${index}`, input_tokens: null, provider_cost_usd: 0 }));
+  const body = await (await userUsageGET(usageRequest())).json();
+  assert.equal(body.requests.length, 50);
+  assert.equal(body.hasMoreRequests, true);
+  assert.equal(body.requests[0].input_tokens, null);
+  assert.equal(body.requests[0].provider_cost_usd, 0);
+  detailRows = [{ user_id: 'another-user' }];
+  assert.equal((await userUsageGET(usageRequest())).status, 503);
+  detailRows = []; detailsUnavailable = true;
   assert.equal((await userUsageGET(usageRequest())).status, 503);
 });
