@@ -7,7 +7,6 @@ import { BOTS, botForPath, canonicalBotId, isInternalRoute, projectForBot } from
 // Where you are, as a path back to the workspace: Research Bot / Project / Bot.
 function trail(path: string): { label: string; tag?: string }[] {
   if (path === '/admin') return [{ label: 'Admin' }];
-  if (path === '/admin/usage') return [{ label: 'Admin' }, { label: 'Usage & costs' }];
   const route = botForPath(path);
   if (!route) return [];
   const bot = canonicalBotId(route);

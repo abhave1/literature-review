@@ -3,10 +3,10 @@
 import { useId, useRef, useState, type ReactNode } from 'react';
 import styles from './admin.module.css';
 
-export default function UserDetailTabs({ access, usage, dirty, busy }: {
-  access: ReactNode; usage: ReactNode; dirty: boolean; busy: boolean;
+export default function UserDetailTabs({ access, usage, dirty, busy, initialTab = 'access' }: {
+  access: ReactNode; usage: ReactNode; dirty: boolean; busy: boolean; initialTab?: 'access' | 'usage';
 }) {
-  const [tab, setTab] = useState<'access' | 'usage'>('access');
+  const [tab, setTab] = useState<'access' | 'usage'>(initialTab);
   const id = useId();
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
   return <>

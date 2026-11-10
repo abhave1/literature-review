@@ -8,11 +8,14 @@ const jwtPart = (value: object) => Buffer.from(JSON.stringify(value)).toString('
 const token = `${jwtPart({ alg: 'HS256' })}.${jwtPart({ sub: userId, exp: Math.floor(Date.now() / 1000) + 3600 })}.signature`;
 const cookie = { name: 'sb-auth-test-auth-token', value: 'base64-' + Buffer.from(JSON.stringify({ access_token: token, refresh_token: 'r', expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: userId } })).toString('base64url') };
 mock.module('next/headers', { namedExports: { cookies: async () => ({ getAll: () => [cookie], set: () => {} }) } });
+mock.module('next/navigation', { namedExports: { redirect: (url: string) => { throw new Error(`REDIRECT:${url}`); } } });
+let legacyUsagePage: typeof import('../app/admin/usage/page').default;
 let loadAdminUsage: typeof import('../lib/usage/admin-report').loadAdminUsage;
 let userUsageGET: typeof import('../app/api/admin/usage/route').GET;
 test.before(async () => {
   ({ loadAdminUsage } = await import('../lib/usage/admin-report'));
   ({ GET: userUsageGET } = await import('../app/api/admin/usage/route'));
+  ({ default: legacyUsagePage } = await import('../app/admin/usage/page'));
 });
 let loggedIn = true, admin = true, unavailable = false, reportCalls = 0;
 let totals: object[] = [];
@@ -46,7 +49,10 @@ test.afterEach(() => mock.restoreAll());
 test('date filters use inclusive UTC days and preserve all-time and user selections', () => {
   const f = usageFilters({ from: '2026-11-01', to: '2026-11-09', user: userId, page: '2' });
   assert.deepEqual(reportBounds(f), { p_from: '2026-11-01T00:00:00.000Z', p_to: '2026-11-10T00:00:00.000Z' });
-  assert.equal(new URL(usageUrl(f), 'http://localhost').searchParams.get('user'), userId);
+  const link = new URL(usageUrl(f), 'http://localhost');
+  assert.equal(link.pathname, '/admin');
+  assert.equal(link.searchParams.get('tab'), 'usage');
+  assert.equal(link.searchParams.get('user'), userId);
   assert.deepEqual(reportBounds(usageFilters({ from: '', to: '' })), { p_from: '-infinity', p_to: 'infinity' });
   assert.equal(usageFilters({}, new Date('2026-11-09T23:59Z')).from, '2026-11-01');
   for (const params of [{ from: '2026-02-30' }, { to: 'bad' }, { from: ['2026-01-01'] }, { from: '2026-02-02', to: '2026-02-01' }, { page: '-1' }, { page: '1.5' }, { page: '10001' }, { user: 'invalid' }]) assert.throws(() => usageFilters(params));
@@ -152,4 +158,32 @@ test('selected-user request details are bounded and never leak another user or h
   assert.equal((await userUsageGET(usageRequest())).status, 503);
   detailRows = []; detailsUnavailable = true;
   assert.equal((await userUsageGET(usageRequest())).status, 503);
+});
+
+
+test('old usage bookmarks redirect into People & access with the selected user and dates', async () => {
+  const params = { from: '2026-11-01', to: '2026-11-09', user: userId, page: '5' };
+  await assert.rejects(() => legacyUsagePage({ searchParams: Promise.resolve(params) }),
+    { message: `REDIRECT:${usageUrl(usageFilters({ ...params, page: '1' }))}` });
+  await assert.rejects(() => legacyUsagePage({ searchParams: Promise.resolve({ user: 'invalid' }) }),
+    { message: 'REDIRECT:/admin?tab=usage' });
+});
+
+test('selected-user dates scope both queries and request pagination leaves totals unpaginated', async () => {
+  const response = await userUsageGET(usageRequest(`user=${userId}&from=2026-11-01&to=2026-11-09&page=2`));
+  assert.equal(response.status, 200);
+  for (const row of requests) assert.deepEqual(row.body, { p_from: '2026-11-01T00:00:00.000Z', p_to: '2026-11-10T00:00:00.000Z' });
+  const detail = requests.find(row => row.url.pathname.endsWith('/ai_usage_request_totals'))!;
+  assert.equal(detail.url.searchParams.get('offset'), '50');
+  assert.equal(detail.url.searchParams.get('limit'), '51');
+  const total = requests.find(row => row.url.pathname.endsWith('/ai_usage_user_totals'))!;
+  assert.equal(total.url.searchParams.get('offset'), null);
+  assert.equal(total.url.searchParams.get('limit'), null);
+});
+
+test('invalid dates and request page numbers cannot query usage', async () => {
+  for (const filter of ['from=2026-02-30', 'from=2026-11-10&to=2026-11-09', 'from=&from=', 'page=0', 'page=10001', 'page=1&page=2']) {
+    assert.equal((await userUsageGET(usageRequest(`user=${userId}&${filter}`))).status, 400);
+  }
+  assert.equal(reportCalls, 0);
 });
