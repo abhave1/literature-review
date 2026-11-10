@@ -8,7 +8,6 @@ import { normalizeBotCatalog } from '@/lib/auth/bot-catalog';
 import styles from './admin.module.css';
 import AddUserDialog from './AddUserDialog';
 import UserUsage from './UserUsage';
-import UserDetailTabs from './UserDetailTabs';
 import DeleteUserDialog from './DeleteUserDialog';
 import Button from '@/components/ui/Button';
 
@@ -27,10 +26,11 @@ const flip = (values: string[], id: string) => values.includes(id) ? values.filt
 const same = (a: string[], b: string[]) => a.length === b.length && a.every(value => b.includes(value));
 const roleLabel = (role: string | null) => role === 'admin' ? 'Admin' : role === 'external' ? 'External' : 'Unassigned';
 
-function Icon({ name }: { name: 'people' | 'projects' | 'search' | 'lock' | 'back' | 'check' | 'trash' }) {
+function Icon({ name }: { name: 'people' | 'projects' | 'costs' | 'search' | 'lock' | 'back' | 'check' | 'trash' }) {
   const paths = {
     people: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>,
     projects: <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
+    costs: <><path d="M3 3v18h18M8 16v-4M13 16V8M18 16V5"/></>,
     search: <><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></>,
     lock: <><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></>,
     back: <path d="m12 5-7 7 7 7M5 12h14"/>,
@@ -46,11 +46,11 @@ function Badge({ children, tone = '' }: {children:ReactNode;tone?:string}) {
   return <span className={styles.badge} data-tone={tone}>{children}</span>;
 }
 
-export default function AdminAccess({ initial, initialUsage, initialTab = 'access' }: { initial: AdminSnapshot; initialUsage?: UsageFilters; initialTab?: 'access' | 'usage' }) {
+export default function AdminAccess({ initial, initialUsage, initialView = 'users' }: { initial: AdminSnapshot; initialUsage?: UsageFilters; initialView?: 'users' | 'costs' }) {
   const [data, setData] = useState(() => normalizeBotCatalog(initial));
   const [addingUser, setAddingUser] = useState(false);
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
-  const [view, setView] = useState<'users' | 'projects'>('users');
+  const [view, setView] = useState<'users' | 'projects' | 'costs'>(initialView);
   const [userId, setUserId] = useState(initial.users.find(person => person.id === initialUsage?.user)?.id ?? initial.users[0]?.id ?? '');
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
@@ -114,26 +114,27 @@ export default function AdminAccess({ initial, initialUsage, initialTab = 'acces
       <nav aria-label="Administration">
         <button className={styles.navItem} data-active={view === 'users'} aria-current={view === 'users' ? 'page' : undefined} disabled={busy} onClick={() => {if (view !== 'users') navigate(() => setView('users'));}}><Icon name="people"/>People & access<span>{data.users.length}</span></button>
         <button className={styles.navItem} data-active={view === 'projects'} aria-current={view === 'projects' ? 'page' : undefined} disabled={busy} onClick={() => {if (view !== 'projects') navigate(() => setView('projects'));}}><Icon name="projects"/>Project features</button>
+        <button className={styles.navItem} data-active={view === 'costs'} aria-current={view === 'costs' ? 'page' : undefined} disabled={busy} onClick={() => {if (view !== 'costs') navigate(() => setView('costs'));}}><Icon name="costs"/>Costs</button>
       </nav>
       <div className={styles.navBottom}><Link href="/bots" onClick={event => {if (dirty && !window.confirm('Discard your unsaved permission changes?')) event.preventDefault();}}><Icon name="back"/>Back to workspace</Link><p>Research Bot</p></div>
     </aside>
     <div className={styles.content}>
-      <header className={styles.heading}><div><h1>{view === 'users' ? 'People & access' : 'Project features'}</h1><p>{view === 'users' ? 'Manage who can use each project, bot, and feature.' : 'Choose which features are available across each research project.'}</p></div><div className={styles.headerActions}><Badge tone="blue"><Icon name="lock"/>Admin workspace</Badge>{view === 'users' && <Button variant="primary" disabled={busy} onClick={() => navigate(() => {setRevision(value => value + 1);setAddingUser(true);})}>+ Add user</Button>}</div></header>
+      <header className={styles.heading}><div><h1>{view === 'users' ? 'People & access' : view === 'costs' ? 'Costs' : 'Project features'}</h1><p>{view === 'users' ? 'Manage who can use each project, bot, and feature.' : view === 'costs' ? 'Review token usage, costs, and request history for each person.' : 'Choose which features are available across each research project.'}</p></div><div className={styles.headerActions}><Badge tone="blue"><Icon name="lock"/>Admin workspace</Badge>{view === 'users' && <Button variant="primary" disabled={busy} onClick={() => navigate(() => {setRevision(value => value + 1);setAddingUser(true);})}>+ Add user</Button>}</div></header>
       {notice && <div className={styles.notice} role="status"><Icon name="check"/>{notice}</div>}
       {error && <div className={styles.error} role="alert">{error}</div>}
-      {view === 'users' ? <div className={styles.workspace}>
+      {view !== 'projects' ? <div className={styles.workspace}>
         <section className={styles.people} aria-label="People">
           <div className={styles.peopleHeader}><h2>People <span>{data.users.length}</span></h2><label className={styles.search}><Icon name="search"/><input aria-label="Search people by email" placeholder="Search by email" value={query} onChange={event => setQuery(event.target.value)}/></label><select aria-label="Filter people by role" value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All roles</option><option value="admin">Admins</option><option value="external">External users</option><option value="unassigned">Unassigned</option></select></div>
           <div className={styles.peopleList}>{visibleUsers.map(person => <button key={person.id} disabled={busy} className={styles.person} data-selected={userId === person.id} aria-pressed={userId === person.id} onClick={() => {if (userId !== person.id) navigate(() => setUserId(person.id));}}><span className={styles.avatar}>{(person.email ?? '?')[0].toUpperCase()}</span><span className={styles.personText}><strong>{person.email ?? 'Email unavailable'}</strong><small>{roleLabel(person.role)}{person.role === 'admin' ? ' · All projects' : ` · ${data.memberships.filter(item => item.user_id === person.id).length} projects`}</small></span></button>)}{!visibleUsers.length && <div className={styles.empty}>No matching users.<button onClick={() => {setQuery('');setFilter('all');}}>Clear filters</button></div>}</div>
-          <div className={styles.listHelp}><Icon name="people"/><p>Add a user by email, then choose their projects and bots. Users who sign in also appear here.</p></div>
+          <div className={styles.listHelp}><Icon name="people"/><p>{view === 'costs' ? 'Select a person to review their token usage, costs, and request history.' : 'Add a user by email, then choose their projects and bots. Users who sign in also appear here.'}</p></div>
         </section>
         <section className={styles.details} aria-label="Selected user details">
-          {user ? <><div className={styles.userHeader}><span className={`${styles.avatar} ${styles.largeAvatar}`}>{(user.email ?? '?')[0].toUpperCase()}</span><div><h2>{user.email ?? 'Email unavailable'}</h2><p>{user.role === 'admin' ? 'Access to all projects and bots' : user.role === 'external' ? 'Access is limited to your assignments' : 'No access assigned yet'}</p></div><div className={styles.userHeaderActions}><Badge tone={user.role === 'admin' ? 'blue' : ''}>{roleLabel(user.role)}</Badge>{user.role === 'admin'
+          {user ? <><div className={styles.userHeader}><span className={`${styles.avatar} ${styles.largeAvatar}`}>{(user.email ?? '?')[0].toUpperCase()}</span><div><h2>{user.email ?? 'Email unavailable'}</h2><p>{view === 'costs' ? 'Recorded analysis and screening activity' : user.role === 'admin' ? 'Access to all projects and bots' : user.role === 'external' ? 'Access is limited to your assignments' : 'No access assigned yet'}</p></div><div className={styles.userHeaderActions}><Badge tone={user.role === 'admin' ? 'blue' : ''}>{roleLabel(user.role)}</Badge>{view === 'users' && (user.role === 'admin'
               ? <span className={styles.protected} title="Admin accounts are protected from deletion."><Icon name="lock"/>Protected</span>
-              : <Button size="sm" className="hover:enabled:border-red-300 hover:enabled:bg-red-50 hover:enabled:text-red-700" disabled={busy || !user.email} onClick={() => navigate(() => {setRevision(value => value + 1);setDeletingUser(user);})}><Icon name="trash"/>Delete user</Button>}</div></div>
-            <UserDetailTabs initialTab={initialTab} dirty={dirty} busy={busy}
-              usage={<UserUsage key={user.id} userId={user.id} initialFilters={initialUsage}/> }
-              access={<UserAccess key={`${userId}:${revision}`} data={data} user={user} busy={busy} save={save} onDirty={setDirty}/>}/>
+              : <Button size="sm" className="hover:enabled:border-red-300 hover:enabled:bg-red-50 hover:enabled:text-red-700" disabled={busy || !user.email} onClick={() => navigate(() => {setRevision(value => value + 1);setDeletingUser(user);})}><Icon name="trash"/>Delete user</Button>)}</div></div>
+            {view === 'costs'
+              ? <UserUsage key={user.id} userId={user.id} initialFilters={initialUsage}/>
+              : <UserAccess key={`${userId}:${revision}`} data={data} user={user} busy={busy} save={save} onDirty={setDirty}/>}
 
           </> : <div className={styles.empty}>Users will appear after signing in with Google.</div>}
         </section>

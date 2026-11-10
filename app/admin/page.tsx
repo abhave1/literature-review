@@ -19,5 +19,5 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   let initialUsage;
   try { initialUsage = usageFilters({ ...params, from: params.from ?? '', to: params.to ?? '' }); }
   catch { initialUsage = usageFilters({ from: '', to: '' }); }
-  return <AdminAccess initial={data as AdminSnapshot} initialUsage={initialUsage} initialTab={params.tab === 'usage' ? 'usage' : 'access'} />;
+  return <AdminAccess initial={data as AdminSnapshot} initialUsage={initialUsage} initialView={params.tab === 'costs' || params.tab === 'usage' ? 'costs' : 'users'} />;
 }
