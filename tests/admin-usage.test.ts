@@ -1,5 +1,6 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
+import { NextRequest } from 'next/server';
 import { usageFilters, reportBounds, usageUrl } from '../lib/usage/report';
 
 const userId = '00000000-0000-0000-0000-000000000001';
@@ -8,7 +9,11 @@ const token = `${jwtPart({ alg: 'HS256' })}.${jwtPart({ sub: userId, exp: Math.f
 const cookie = { name: 'sb-auth-test-auth-token', value: 'base64-' + Buffer.from(JSON.stringify({ access_token: token, refresh_token: 'r', expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: userId } })).toString('base64url') };
 mock.module('next/headers', { namedExports: { cookies: async () => ({ getAll: () => [cookie], set: () => {} }) } });
 let loadAdminUsage: typeof import('../lib/usage/admin-report').loadAdminUsage;
-test.before(async () => { ({ loadAdminUsage } = await import('../lib/usage/admin-report')); });
+let userUsageGET: typeof import('../app/api/admin/usage/route').GET;
+test.before(async () => {
+  ({ loadAdminUsage } = await import('../lib/usage/admin-report'));
+  ({ GET: userUsageGET } = await import('../app/api/admin/usage/route'));
+});
 let loggedIn = true, admin = true, unavailable = false, reportCalls = 0;
 let totals: object[] = [];
 const requests: { url: URL; body: Record<string, unknown> }[] = [];
@@ -86,4 +91,42 @@ test('invalid filters never query reports and service failures do not become emp
   assert.equal(reportCalls, 0);
   unavailable = true;
   assert.deepEqual(await loadAdminUsage({}), { kind: 'unavailable' });
+});
+
+
+const usageRequest = (query = `user=${userId}`) => new NextRequest(`https://app.example/api/admin/usage?${query}`);
+
+test('selected-user API denies signed-out, non-admin and cross-origin requests before usage queries', async () => {
+  loggedIn = false;
+  assert.equal((await userUsageGET(usageRequest())).status, 401);
+  loggedIn = true; admin = false;
+  assert.equal((await userUsageGET(usageRequest())).status, 403);
+  admin = true;
+  assert.equal((await userUsageGET(new NextRequest(usageRequest().url, { headers: { origin: 'https://other.example' } }))).status, 403);
+  assert.equal(reportCalls, 0);
+});
+
+test('selected-user API loads all-time usage for only that user using caller RLS', async () => {
+  totals = [{ user_id: userId, request_count: 2, avg_estimated_usd_per_request: 0, known_accounted_cost_usd: null }];
+  const response = await userUsageGET(usageRequest());
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'private, no-store');
+  assert.deepEqual(await response.json(), { userId, usage: totals[0] });
+  assert.equal(reportCalls, 1);
+  assert.equal(requests[0].url.pathname, '/rest/v1/rpc/ai_usage_user_totals');
+  assert.equal(requests[0].url.searchParams.get('user_id'), `eq.${userId}`);
+  assert.deepEqual(requests[0].body, { p_from: '-infinity', p_to: 'infinity' });
+});
+
+test('selected-user API distinguishes no history from unavailable and rejects bad user filters', async () => {
+  for (const query of ['', 'user=', 'user=invalid', `user=${userId}&user=${userId}`]) {
+    assert.equal((await userUsageGET(usageRequest(query))).status, 400);
+  }
+  assert.equal(reportCalls, 0);
+  assert.deepEqual(await (await userUsageGET(usageRequest())).json(), { userId, usage: null });
+  unavailable = true;
+  assert.equal((await userUsageGET(usageRequest())).status, 503);
+  unavailable = false;
+  totals = [{ user_id: 'another-user' }];
+  assert.equal((await userUsageGET(usageRequest())).status, 503);
 });

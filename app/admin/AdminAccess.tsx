@@ -6,6 +6,7 @@ import type { AdminSnapshot } from '@/lib/auth/admin-types';
 import { normalizeBotCatalog } from '@/lib/auth/bot-catalog';
 import styles from './admin.module.css';
 import AddUserDialog from './AddUserDialog';
+import UserUsage from './UserUsage';
 import DeleteUserDialog from './DeleteUserDialog';
 import Button from '@/components/ui/Button';
 
@@ -129,6 +130,7 @@ export default function AdminAccess({ initial }: { initial: AdminSnapshot }) {
           {user ? <><div className={styles.userHeader}><span className={`${styles.avatar} ${styles.largeAvatar}`}>{(user.email ?? '?')[0].toUpperCase()}</span><div><h2>{user.email ?? 'Email unavailable'}</h2><p>{user.role === 'admin' ? 'Access to all projects and bots' : user.role === 'external' ? 'Access is limited to your assignments' : 'No access assigned yet'}</p></div><div className={styles.userHeaderActions}><Badge tone={user.role === 'admin' ? 'blue' : ''}>{roleLabel(user.role)}</Badge>{user.role === 'admin'
               ? <span className={styles.protected} title="Admin accounts are protected from deletion."><Icon name="lock"/>Protected</span>
               : <Button size="sm" className="hover:enabled:border-red-300 hover:enabled:bg-red-50 hover:enabled:text-red-700" disabled={busy || !user.email} onClick={() => navigate(() => {setRevision(value => value + 1);setDeletingUser(user);})}><Icon name="trash"/>Delete user</Button>}</div></div>
+            <UserUsage key={user.id} userId={user.id}/>
             <UserAccess key={`${userId}:${revision}`} data={data} user={user} busy={busy} save={save} onDirty={setDirty}/>
           </> : <div className={styles.empty}>Users will appear after signing in with Google.</div>}
         </section>
