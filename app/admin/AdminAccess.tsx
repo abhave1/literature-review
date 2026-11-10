@@ -2,11 +2,13 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import type { UsageFilters } from '@/lib/usage/report';
 import type { AdminSnapshot } from '@/lib/auth/admin-types';
 import { normalizeBotCatalog } from '@/lib/auth/bot-catalog';
 import styles from './admin.module.css';
 import AddUserDialog from './AddUserDialog';
 import UserUsage from './UserUsage';
+import UserDetailTabs from './UserDetailTabs';
 import DeleteUserDialog from './DeleteUserDialog';
 import Button from '@/components/ui/Button';
 
@@ -44,12 +46,12 @@ function Badge({ children, tone = '' }: {children:ReactNode;tone?:string}) {
   return <span className={styles.badge} data-tone={tone}>{children}</span>;
 }
 
-export default function AdminAccess({ initial }: { initial: AdminSnapshot }) {
+export default function AdminAccess({ initial, initialUsage, initialTab = 'access' }: { initial: AdminSnapshot; initialUsage?: UsageFilters; initialTab?: 'access' | 'usage' }) {
   const [data, setData] = useState(() => normalizeBotCatalog(initial));
   const [addingUser, setAddingUser] = useState(false);
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
   const [view, setView] = useState<'users' | 'projects'>('users');
-  const [userId, setUserId] = useState(initial.users[0]?.id ?? '');
+  const [userId, setUserId] = useState(initial.users.find(person => person.id === initialUsage?.user)?.id ?? initial.users[0]?.id ?? '');
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [busy, setBusy] = useState(false);
@@ -110,7 +112,6 @@ export default function AdminAccess({ initial }: { initial: AdminSnapshot }) {
     <aside className={styles.navigation}>
       <div className={styles.navTitle}><span className={styles.brandMark}>R</span><div>Research Bot<small>Administration</small></div></div>
       <nav aria-label="Administration">
-        <Link className={styles.navItem} href="/admin/usage" onClick={event => { if (busy || (dirty && !window.confirm('Discard your unsaved permission changes?'))) event.preventDefault(); }}>Usage</Link>
         <button className={styles.navItem} data-active={view === 'users'} aria-current={view === 'users' ? 'page' : undefined} disabled={busy} onClick={() => {if (view !== 'users') navigate(() => setView('users'));}}><Icon name="people"/>People & access<span>{data.users.length}</span></button>
         <button className={styles.navItem} data-active={view === 'projects'} aria-current={view === 'projects' ? 'page' : undefined} disabled={busy} onClick={() => {if (view !== 'projects') navigate(() => setView('projects'));}}><Icon name="projects"/>Project features</button>
       </nav>
@@ -126,12 +127,14 @@ export default function AdminAccess({ initial }: { initial: AdminSnapshot }) {
           <div className={styles.peopleList}>{visibleUsers.map(person => <button key={person.id} disabled={busy} className={styles.person} data-selected={userId === person.id} aria-pressed={userId === person.id} onClick={() => {if (userId !== person.id) navigate(() => setUserId(person.id));}}><span className={styles.avatar}>{(person.email ?? '?')[0].toUpperCase()}</span><span className={styles.personText}><strong>{person.email ?? 'Email unavailable'}</strong><small>{roleLabel(person.role)}{person.role === 'admin' ? ' · All projects' : ` · ${data.memberships.filter(item => item.user_id === person.id).length} projects`}</small></span></button>)}{!visibleUsers.length && <div className={styles.empty}>No matching users.<button onClick={() => {setQuery('');setFilter('all');}}>Clear filters</button></div>}</div>
           <div className={styles.listHelp}><Icon name="people"/><p>Add a user by email, then choose their projects and bots. Users who sign in also appear here.</p></div>
         </section>
-        <section className={styles.details} aria-label="Selected user permissions">
+        <section className={styles.details} aria-label="Selected user details">
           {user ? <><div className={styles.userHeader}><span className={`${styles.avatar} ${styles.largeAvatar}`}>{(user.email ?? '?')[0].toUpperCase()}</span><div><h2>{user.email ?? 'Email unavailable'}</h2><p>{user.role === 'admin' ? 'Access to all projects and bots' : user.role === 'external' ? 'Access is limited to your assignments' : 'No access assigned yet'}</p></div><div className={styles.userHeaderActions}><Badge tone={user.role === 'admin' ? 'blue' : ''}>{roleLabel(user.role)}</Badge>{user.role === 'admin'
               ? <span className={styles.protected} title="Admin accounts are protected from deletion."><Icon name="lock"/>Protected</span>
               : <Button size="sm" className="hover:enabled:border-red-300 hover:enabled:bg-red-50 hover:enabled:text-red-700" disabled={busy || !user.email} onClick={() => navigate(() => {setRevision(value => value + 1);setDeletingUser(user);})}><Icon name="trash"/>Delete user</Button>}</div></div>
-            <UserUsage key={user.id} userId={user.id}/>
-            <UserAccess key={`${userId}:${revision}`} data={data} user={user} busy={busy} save={save} onDirty={setDirty}/>
+            <UserDetailTabs initialTab={initialTab} dirty={dirty} busy={busy}
+              usage={<UserUsage key={user.id} userId={user.id} initialFilters={initialUsage}/> }
+              access={<UserAccess key={`${userId}:${revision}`} data={data} user={user} busy={busy} save={save} onDirty={setDirty}/>}/>
+
           </> : <div className={styles.empty}>Users will appear after signing in with Google.</div>}
         </section>
       </div> : <div className={styles.settingsWorkspace}>

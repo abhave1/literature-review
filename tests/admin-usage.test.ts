@@ -8,17 +8,23 @@ const jwtPart = (value: object) => Buffer.from(JSON.stringify(value)).toString('
 const token = `${jwtPart({ alg: 'HS256' })}.${jwtPart({ sub: userId, exp: Math.floor(Date.now() / 1000) + 3600 })}.signature`;
 const cookie = { name: 'sb-auth-test-auth-token', value: 'base64-' + Buffer.from(JSON.stringify({ access_token: token, refresh_token: 'r', expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: userId } })).toString('base64url') };
 mock.module('next/headers', { namedExports: { cookies: async () => ({ getAll: () => [cookie], set: () => {} }) } });
+mock.module('next/navigation', { namedExports: { redirect: (url: string) => { throw new Error(`REDIRECT:${url}`); } } });
+let legacyUsagePage: typeof import('../app/admin/usage/page').default;
 let loadAdminUsage: typeof import('../lib/usage/admin-report').loadAdminUsage;
 let userUsageGET: typeof import('../app/api/admin/usage/route').GET;
 test.before(async () => {
   ({ loadAdminUsage } = await import('../lib/usage/admin-report'));
   ({ GET: userUsageGET } = await import('../app/api/admin/usage/route'));
+  ({ default: legacyUsagePage } = await import('../app/admin/usage/page'));
 });
 let loggedIn = true, admin = true, unavailable = false, reportCalls = 0;
 let totals: object[] = [];
+let detailRows: object[] = [];
+let detailsUnavailable = false;
 const requests: { url: URL; body: Record<string, unknown> }[] = [];
 test.beforeEach(() => {
-  loggedIn = true; admin = true; unavailable = false; reportCalls = 0; totals = []; requests.length = 0;
+  loggedIn = true; admin = true; unavailable = false; reportCalls = 0; totals = []; requests.length = 0; detailsUnavailable = false;
+  detailRows = [{ user_id: userId, input_tokens: null, provider_cost_usd: 0, estimated_cost_usd: null }];
   process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://auth-test.supabase.co';
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'fake-publishable';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'must-not-use-service-key';
@@ -34,7 +40,7 @@ test.beforeEach(() => {
     if (unavailable) return Response.json({ message: 'missing function' }, { status: 404 });
     if (url.pathname === '/rest/v1/rpc/admin_access_snapshot') return Response.json({ users: [{ id: userId, email: 'researcher@example.edu', role: 'external' }] });
     if (url.pathname === '/rest/v1/rpc/ai_usage_user_totals') return Response.json(totals);
-    if (url.pathname === '/rest/v1/rpc/ai_usage_request_totals') return Response.json([{ user_id: userId, input_tokens: null, provider_cost_usd: 0, estimated_cost_usd: null }]);
+    if (url.pathname === '/rest/v1/rpc/ai_usage_request_totals') return detailsUnavailable ? Response.json({ message: 'unavailable' }, { status: 503 }) : Response.json(detailRows);
     throw new Error(`Unexpected request: ${url.pathname}`);
   });
 });
@@ -43,7 +49,10 @@ test.afterEach(() => mock.restoreAll());
 test('date filters use inclusive UTC days and preserve all-time and user selections', () => {
   const f = usageFilters({ from: '2026-11-01', to: '2026-11-09', user: userId, page: '2' });
   assert.deepEqual(reportBounds(f), { p_from: '2026-11-01T00:00:00.000Z', p_to: '2026-11-10T00:00:00.000Z' });
-  assert.equal(new URL(usageUrl(f), 'http://localhost').searchParams.get('user'), userId);
+  const link = new URL(usageUrl(f), 'http://localhost');
+  assert.equal(link.pathname, '/admin');
+  assert.equal(link.searchParams.get('tab'), 'usage');
+  assert.equal(link.searchParams.get('user'), userId);
   assert.deepEqual(reportBounds(usageFilters({ from: '', to: '' })), { p_from: '-infinity', p_to: 'infinity' });
   assert.equal(usageFilters({}, new Date('2026-11-09T23:59Z')).from, '2026-11-01');
   for (const params of [{ from: '2026-02-30' }, { to: 'bad' }, { from: ['2026-01-01'] }, { from: '2026-02-02', to: '2026-02-01' }, { page: '-1' }, { page: '1.5' }, { page: '10001' }, { user: 'invalid' }]) assert.throws(() => usageFilters(params));
@@ -111,11 +120,16 @@ test('selected-user API loads all-time usage for only that user using caller RLS
   const response = await userUsageGET(usageRequest());
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'private, no-store');
-  assert.deepEqual(await response.json(), { userId, usage: totals[0] });
-  assert.equal(reportCalls, 1);
+  assert.deepEqual(await response.json(), { userId, usage: totals[0], requests: detailRows, hasMoreRequests: false });
+  assert.equal(reportCalls, 2);
   assert.equal(requests[0].url.pathname, '/rest/v1/rpc/ai_usage_user_totals');
   assert.equal(requests[0].url.searchParams.get('user_id'), `eq.${userId}`);
   assert.deepEqual(requests[0].body, { p_from: '-infinity', p_to: 'infinity' });
+  const details = requests.find(row => row.url.pathname.endsWith('/ai_usage_request_totals'))!;
+  assert.equal(details.url.searchParams.get('user_id'), `eq.${userId}`);
+  assert.equal(details.url.searchParams.get('order'), 'started_at.desc,request_id.asc');
+  assert.equal(details.url.searchParams.get('limit'), '51');
+  assert.deepEqual(details.body, { p_from: '-infinity', p_to: 'infinity' });
 });
 
 test('selected-user API distinguishes no history from unavailable and rejects bad user filters', async () => {
@@ -123,10 +137,53 @@ test('selected-user API distinguishes no history from unavailable and rejects ba
     assert.equal((await userUsageGET(usageRequest(query))).status, 400);
   }
   assert.equal(reportCalls, 0);
-  assert.deepEqual(await (await userUsageGET(usageRequest())).json(), { userId, usage: null });
+  detailRows = [];
+  assert.deepEqual(await (await userUsageGET(usageRequest())).json(), { userId, usage: null, requests: [], hasMoreRequests: false });
   unavailable = true;
   assert.equal((await userUsageGET(usageRequest())).status, 503);
   unavailable = false;
   totals = [{ user_id: 'another-user' }];
   assert.equal((await userUsageGET(usageRequest())).status, 503);
+});
+
+
+test('selected-user request details are bounded and never leak another user or hide query failures', async () => {
+  detailRows = Array.from({ length: 51 }, (_, index) => ({ user_id: userId, request_id: `request-${index}`, input_tokens: null, provider_cost_usd: 0 }));
+  const body = await (await userUsageGET(usageRequest())).json();
+  assert.equal(body.requests.length, 50);
+  assert.equal(body.hasMoreRequests, true);
+  assert.equal(body.requests[0].input_tokens, null);
+  assert.equal(body.requests[0].provider_cost_usd, 0);
+  detailRows = [{ user_id: 'another-user' }];
+  assert.equal((await userUsageGET(usageRequest())).status, 503);
+  detailRows = []; detailsUnavailable = true;
+  assert.equal((await userUsageGET(usageRequest())).status, 503);
+});
+
+
+test('old usage bookmarks redirect into People & access with the selected user and dates', async () => {
+  const params = { from: '2026-11-01', to: '2026-11-09', user: userId, page: '5' };
+  await assert.rejects(() => legacyUsagePage({ searchParams: Promise.resolve(params) }),
+    { message: `REDIRECT:${usageUrl(usageFilters({ ...params, page: '1' }))}` });
+  await assert.rejects(() => legacyUsagePage({ searchParams: Promise.resolve({ user: 'invalid' }) }),
+    { message: 'REDIRECT:/admin?tab=usage' });
+});
+
+test('selected-user dates scope both queries and request pagination leaves totals unpaginated', async () => {
+  const response = await userUsageGET(usageRequest(`user=${userId}&from=2026-11-01&to=2026-11-09&page=2`));
+  assert.equal(response.status, 200);
+  for (const row of requests) assert.deepEqual(row.body, { p_from: '2026-11-01T00:00:00.000Z', p_to: '2026-11-10T00:00:00.000Z' });
+  const detail = requests.find(row => row.url.pathname.endsWith('/ai_usage_request_totals'))!;
+  assert.equal(detail.url.searchParams.get('offset'), '50');
+  assert.equal(detail.url.searchParams.get('limit'), '51');
+  const total = requests.find(row => row.url.pathname.endsWith('/ai_usage_user_totals'))!;
+  assert.equal(total.url.searchParams.get('offset'), null);
+  assert.equal(total.url.searchParams.get('limit'), null);
+});
+
+test('invalid dates and request page numbers cannot query usage', async () => {
+  for (const filter of ['from=2026-02-30', 'from=2026-11-10&to=2026-11-09', 'from=&from=', 'page=0', 'page=10001', 'page=1&page=2']) {
+    assert.equal((await userUsageGET(usageRequest(`user=${userId}&${filter}`))).status, 400);
+  }
+  assert.equal(reportCalls, 0);
 });

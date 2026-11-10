@@ -27,17 +27,18 @@ an old rate version in place; create a new version for future calls.
 
 ## Reports
 
-Admins can open **Usage & costs** from the bot workspace or the admin navigation
-at `/admin/usage`. The page defaults to the current UTC month and offers inclusive
-date filters and an all-time option. It shows 100 users per page, resolves current
-account emails, and retains UUIDs for deleted or unknown accounts. Selecting a
-user shows their latest 50 requests in the period; narrow the dates for earlier
-requests. Coverage counts accompany each average and partial total.
+Admins open **People & access** at `/admin`, select a person, and choose their
+**Usage** tab. Summary costs, token averages, inclusive UTC date filters, and
+paginated request details all live inside that selected-user panel. There is no
+separate usage dashboard or workspace link. Old `/admin/usage` bookmarks redirect
+to the Usage tab, preserving the selected user and valid date filters.
 
-Both the route proxy and server data loader verify admin access. Queries use the
-signed-in user's Supabase session, preserving database RLS. Responses are dynamic
-and private/no-store. No service-role key, new table, or migration is needed for
-the dashboard. Ordinary users cannot load it by entering its URL directly.
+The read-only selected-user API requires admin authorization and uses the
+caller's session so ledger RLS remains enforced. It scopes both summary and
+request queries to the selected user. Each request page returns at most 50 rows
+plus a next-page indicator, with stable newest-first ordering. Unknown usage is
+shown as unknown, and cost coverage remains explicit. Permission drafts remain
+mounted when switching between Access and Usage.
 
 Two read-only, security-invoker SQL functions expose reports through Supabase RPC.
 They inherit the ledger's admin-only read policy. Ordinary signed-in users see
