@@ -19,6 +19,7 @@ test('post-login redirects cannot escape to another origin or auth route', () =>
   }
   assert.equal(safeNext('/internal/mxml4'), '/internal/mxml4');
   assert.equal(safeNext('/admin'), '/admin');
+  assert.equal(safeNext('/admin/usage'), '/admin/usage');
 });
 
 test('bot scope is separate from project feature permissions', () => {
@@ -87,8 +88,10 @@ test('server gate validates sessions and current grants with Supabase', async t 
     assert.equal(new URL(denied.headers.get('location')!).pathname, '/bots');
     assert.equal(denied.headers.get('cache-control'), 'private, no-store');
     assert.equal(new URL((await proxy(request('/admin', true))).headers.get('location')!).pathname, '/bots');
+    assert.equal(new URL((await proxy(request('/admin/usage', true))).headers.get('location')!).pathname, '/bots');
     admin = true;
     assert.equal((await proxy(request('/admin', true))).status, 200);
+    assert.equal((await proxy(request('/admin/usage', true))).status, 200);
     assert.equal((await proxy(request('/internal/mxml4', true))).status, 200);
     admin = false;
     grants = [];

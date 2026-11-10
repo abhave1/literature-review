@@ -39,7 +39,7 @@ export async function proxy(request: NextRequest) {
     if (error || !user?.email) return deny(401, 'Sign in required', '/login');
     // APIs perform resource-specific authorization inside each handler as well.
     if (api || path === '/bots' || path === '/access-required') return finish(response);
-    if (path === '/admin') {
+    if (path === '/admin' || path.startsWith('/admin/')) {
       const { data: admin, error: adminError } = await supabase.rpc('is_admin');
       if (adminError || admin !== true) return deny(403, 'Admin required', '/bots');
       return finish(response);

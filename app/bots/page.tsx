@@ -40,6 +40,7 @@ export default async function BotsPage() {
           <div className={styles.operator}>
             <span className={`${styles.status} ${styles.mono}`}>{account.user.email}</span>
             {account.isAdmin && <Link className={styles.admin} href="/admin">Manage users & access</Link>}
+            {account.isAdmin && <Link className={styles.admin} href="/admin/usage">Usage & costs</Link>}
           </div>
         </header>
         {projects.length ? projects.map(project => {

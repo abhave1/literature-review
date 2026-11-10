@@ -50,7 +50,7 @@ export function botForPath(path: string): BotId | undefined {
 
 export function safeNext(value: unknown): string {
   // Only known app pages are valid post-login destinations; no open redirects.
-  return typeof value === 'string' && (value === '/bots' || value === '/admin' || botForPath(value))
+  return typeof value === 'string' && (value === '/bots' || value === '/admin' || value === '/admin/usage' || botForPath(value))
     ? value : '/bots';
 }
 
